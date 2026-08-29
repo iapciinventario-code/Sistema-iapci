@@ -19,7 +19,7 @@ canalSincronizacion.onmessage = function (event) {
       usuarioActual = null;
       document.getElementById("pantalla-sistema")?.classList.add("oculto");
       document.getElementById("pantalla-login")?.classList.remove("oculto");
-      alert("⚠️ Su sesión ha sido cerrada porque este usuario/rol acaba de iniciar sesión en otra computadora o ventana.");
+      mostrarToast("⚠️ Su sesión ha sido cerrada porque este usuario/rol acaba de iniciar sesión en otra computadora o ventana.", "warning");
     }
   } else if (mensaje.tipo === "ACTUALIZAR_ESTADO_SISTEMA") {
     if (usuarioActual) {
@@ -29,6 +29,53 @@ canalSincronizacion.onmessage = function (event) {
     }
   }
 };
+
+// --- UTILIDADES DE NOTIFICACIÓN Y DIÁLOGOS MOSTRADOS EN PANTALLA ---
+function mostrarToast(mensaje, tipo = 'info') {
+  let container = document.getElementById("iapci-toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "iapci-toast-container";
+    container.style.cssText = "position: fixed; top: 20px; right: 20px; z-index: 99999; display: flex; flex-direction: column; gap: 10px;";
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement("div");
+  let bgColor = "#2980b9";
+  if (tipo === 'success') bgColor = "#27ae60";
+  if (tipo === 'error') bgColor = "#c0392b";
+  if (tipo === 'warning') bgColor = "#f39c12";
+
+  toast.style.cssText = `background: ${bgColor}; color: white; padding: 12px 20px; border-radius: 6px; font-size: 13px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.15); opacity: 0; transform: translateY(-10px); transition: all 0.3s ease; max-width: 380px;`;
+  toast.textContent = mensaje;
+  container.appendChild(toast);
+
+  setTimeout(() => { toast.style.opacity = "1"; toast.style.transform = "translateY(0)"; }, 10);
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    toast.style.transform = "translateY(-10px)";
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+}
+
+function solicitarConfirmacion(mensaje, accionConfirmada) {
+  const overlay = document.createElement("div");
+  overlay.style.cssText = "position: fixed; top:0; left:0; width:100vw; height:100vh; background: rgba(0,0,0,0.5); display:flex; justify-content:center; align-items:center; z-index: 999999;";
+  const box = document.createElement("div");
+  box.style.cssText = "background: white; padding: 24px; border-radius: 8px; max-width: 420px; width: 90%; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.3); font-family: sans-serif;";
+  box.innerHTML = `
+    <h3 style="margin-top:0; color:#2c3e50; font-size: 16px;">⚠️ Confirmación Requerida</h3>
+    <p style="font-size: 13px; color:#555; white-space: pre-line; line-height: 1.4;">${mensaje}</p>
+    <div style="display:flex; gap:10px; justify-content:center; margin-top:20px;">
+      <button id="btn-conf-si" style="background:#27ae60; color:white; border:none; padding:8px 16px; border-radius:4px; font-weight:bold; cursor:pointer;">Sí, Continuar</button>
+      <button id="btn-conf-no" style="background:#95a5a6; color:white; border:none; padding:8px 16px; border-radius:4px; font-weight:bold; cursor:pointer;">Cancelar</button>
+    </div>
+  `;
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  box.querySelector("#btn-conf-si").onclick = () => { document.body.removeChild(overlay); accionConfirmada(); };
+  box.querySelector("#btn-conf-no").onclick = () => { document.body.removeChild(overlay); };
+}
 
 // --- 2. ESTADO GLOBAL E INICIALIZACIÓN DE DATOS LOCALES ---
 function obtenerUsuariosIniciales() {
@@ -221,7 +268,7 @@ async function guardarNuevosUsuarios() {
   const asPass = document.getElementById("cfg-pass-asistente").value;
 
   if (!sUser || !aUser || !asUser) {
-    alert("Los nombres de usuario no pueden estar vacíos.");
+    mostrarToast("Los nombres de usuario no pueden estar vacíos.", "warning");
     return;
   }
 
@@ -251,7 +298,7 @@ async function guardarNuevosUsuarios() {
 
   usuarios = nuevosUsuarios;
   localStorage.setItem("iapci_usuarios", JSON.stringify(usuarios));
-  alert("✅ Credenciales de usuarios actualizadas exitosamente.");
+  mostrarToast("✅ Credenciales de usuarios actualizadas exitosamente.", "success");
   toggleModalUsuarios();
 }
 
@@ -288,6 +335,7 @@ function iniciarSesion() {
 
     usuarioActual = usuarios[userInput];
     localStorage.setItem(claveSesionKey, JSON.stringify({ tabId: idSesionUnicaTab, timestamp: Date.now() }));
+    localStorage.setItem("iapci_usuario_activo_nombre", userInput);
 
     canalSincronizacion.postMessage({ tipo: "FORZAR_CIERRE_SESION", rol: rolIntentado });
 
@@ -319,24 +367,48 @@ function iniciarSesion() {
 
 function verificarPermisoAdmin(accionCallback) {
   if (usuarioActual && usuarioActual.rol === "Asistente") {
-    let claveAdmin = prompt("⚠️ Acción restringida. Introduzca la clave del Administrador para continuar:");
-    
-    if (claveAdmin === null) {
-      const inputTasaElem = document.getElementById("f-tasa-cambio");
-      if (inputTasaElem) inputTasaElem.value = tasaCambioBCV;
-      return; 
-    }
-
     let adminKey = Object.keys(usuarios).find(u => usuarios[u].rol === "Administrador");
     let passAdminReal = adminKey ? usuarios[adminKey].clave : "admin123";
 
-    if (claveAdmin === passAdminReal) {
-      accionCallback();
-    } else {
-      alert("❌ Clave incorrecta");
+    const overlay = document.createElement("div");
+    overlay.style.cssText = "position: fixed; top:0; left:0; width:100vw; height:100vh; background: rgba(0,0,0,0.5); display:flex; justify-content:center; align-items:center; z-index: 999999;";
+    
+    const box = document.createElement("div");
+    box.style.cssText = "background: white; padding: 24px; border-radius: 8px; max-width: 360px; width: 90%; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.3); font-family: sans-serif;";
+    
+    box.innerHTML = `
+      <h3 style="margin-top:0; color:#2c3e50; font-size: 15px;">🔒 Acción Restringida</h3>
+      <p style="font-size: 12px; color:#666;">Introduzca la clave del Administrador para continuar:</p>
+      <input type="password" id="input-clave-admin-val" style="width: 100%; padding: 8px; box-sizing: border-box; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px;" placeholder="Clave admin">
+      <div style="display:flex; gap:10px; justify-content:center;">
+        <button id="btn-val-admin" style="background:#27ae60; color:white; border:none; padding:8px 16px; border-radius:4px; font-weight:bold; cursor:pointer;">Aceptar</button>
+        <button id="btn-canc-admin" style="background:#95a5a6; color:white; border:none; padding:8px 16px; border-radius:4px; font-weight:bold; cursor:pointer;">Cancelar</button>
+      </div>
+    `;
+
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    const inputPass = box.querySelector("#input-clave-admin-val");
+    inputPass.focus();
+
+    box.querySelector("#btn-val-admin").onclick = () => {
+      const val = inputPass.value;
+      document.body.removeChild(overlay);
+      if (val === passAdminReal) {
+        accionCallback();
+      } else {
+        mostrarToast("❌ Clave de administrador incorrecta", "error");
+        const inputTasaElem = document.getElementById("f-tasa-cambio");
+        if (inputTasaElem) inputTasaElem.value = tasaCambioBCV;
+      }
+    };
+
+    box.querySelector("#btn-canc-admin").onclick = () => {
+      document.body.removeChild(overlay);
       const inputTasaElem = document.getElementById("f-tasa-cambio");
       if (inputTasaElem) inputTasaElem.value = tasaCambioBCV;
-    }
+    };
   } else {
     accionCallback();
   }
@@ -379,7 +451,7 @@ function actualizarTasa() {
     const inputTasa = parseFloat(document.getElementById("f-tasa-cambio").value);
     
     if (isNaN(inputTasa) || inputTasa <= 0) {
-      alert("❌ Por favor introduzca una tasa de cambio válida.");
+      mostrarToast("❌ Por favor introduzca una tasa de cambio válida.", "warning");
       document.getElementById("f-tasa-cambio").value = tasaCambioBCV;
       return;
     }
@@ -398,7 +470,7 @@ function actualizarTasa() {
     if (lblTasa) lblTasa.textContent = `Bs. ${tasaCambioBCV.toFixed(2)} / $`;
 
     actualizarTodo();
-    alert(`✅ Tasa del día actualizada exitosamente a Bs. ${tasaCambioBCV.toFixed(2)} / $`);
+    mostrarToast(`✅ Tasa del día actualizada exitosamente a Bs. ${tasaCambioBCV.toFixed(2)} / $`, "success");
   });
 }
 
@@ -413,6 +485,7 @@ function cerrarSesion() {
   if (usuarioActual) {
     clearInterval(intervaloHeartbeat);
     localStorage.removeItem(`iapci_sesion_activa_${usuarioActual.rol}`);
+    localStorage.removeItem("iapci_usuario_activo_nombre");
   }
   usuarioActual = null;
   document.getElementById("pantalla-sistema")?.classList.add("oculto");
@@ -440,8 +513,8 @@ function renderTablaStock(codigoResaltar = null) {
     const stockActual = prod.stockInic + prod.entradas - prod.salidas;
     const valorDisponibleBs = stockActual * prod.precioBs;
     
-    const estado = stockActual > prod.stockMin ? "Buen Nivel" : (stockActual > 0 ? "Bajo Nivel" : "Agotado");
-    const claseBadge = stockActual > prod.stockMin ? "badge-buen" : (stockActual > 0 ? "badge-bajo" : "badge-agotado");
+    const estado = stockActual > (prod.stockMin !== undefined ? prod.stockMin : 12) ? "Buen Nivel" : (stockActual > 0 ? "Bajo Nivel" : "Agotado");
+    const claseBadge = stockActual > (prod.stockMin !== undefined ? prod.stockMin : 12) ? "badge-buen" : (stockActual > 0 ? "badge-bajo" : "badge-agotado");
 
     totalInic += prod.stockInic;
     totalEntradas += prod.entradas;
@@ -470,7 +543,7 @@ function renderTablaStock(codigoResaltar = null) {
       <td>${prod.salidas}</td>
       <td><strong>${stockActual}</strong></td>
       <td>Bs.S ${valorDisponibleBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</td>
-      <td>${prod.stockMin}</td>
+      <td>${prod.stockMin !== undefined ? prod.stockMin : 12}</td>
       <td><span class="${claseBadge}">${estado}</span></td>
       <td>${prod.obs || '-'}</td>
       <td><button onclick="modificarStockFila(${index})" style="background:#007bff; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">Editar</button></td>
@@ -493,46 +566,152 @@ function renderTablaStock(codigoResaltar = null) {
 
 async function modificarStockFila(index) {
   if (!usuarioActual || (usuarioActual.rol !== "Administrador" && usuarioActual.rol !== "Soporte Técnico")) {
-    alert("❌ Acceso denegado. El rol de Asistente no tiene permisos para editar el estatus y stock.");
+    mostrarToast("❌ Acceso denegado. El rol de Asistente no tiene permisos para editar el estatus y stock.", "error");
     return;
   }
 
   let prod = { ...inventario[index] };
   let stockActualCalculado = prod.stockInic + prod.entradas - prod.salidas;
 
-  let nuevoCodigo = prompt(`Modificar Código del producto:`, prod.codigo);
-  if (nuevoCodigo !== null) prod.codigo = nuevoCodigo.trim().toUpperCase() || prod.codigo;
+  const overlay = document.createElement("div");
+  overlay.style.cssText = "position: fixed; top:0; left:0; width:100vw; height:100vh; background: rgba(0,0,0,0.5); display:flex; justify-content:center; align-items:center; z-index: 999999;";
+  
+  const box = document.createElement("div");
+  box.style.cssText = "background: white; padding: 20px 24px; border-radius: 8px; max-width: 500px; width: 92%; max-height: 90vh; overflow-y: auto; font-family: sans-serif; box-shadow: 0 8px 24px rgba(0,0,0,0.25);";
+  
+  const nombreUsuarioActivo = localStorage.getItem("iapci_usuario_activo_nombre")?.toUpperCase() || usuarioActual.rol;
 
-  let nuevaDesc = prompt(`Modificar Descripción del producto:`, prod.descripcion);
-  if (nuevaDesc !== null) prod.descripcion = nuevaDesc.trim().toUpperCase() || prod.descripcion;
+  box.innerHTML = `
+    <div style="border-bottom:2px solid #34495e; padding-bottom:10px; margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <h3 style="margin:0; color:#2c3e50; font-size: 16px;">✏️ Edición de Estatus y Stock</h3>
+        <span style="font-size:11px; background:#e8f4f8; color:#2980b9; padding:2px 6px; border-radius:4px; font-weight:bold; display:inline-block; margin-top:4px;">
+          👤 Editor: ${nombreUsuarioActivo} (${usuarioActual.rol})
+        </span>
+      </div>
+      <span style="font-size:12px; font-weight:bold; color:#7f8c8d;">Código: ${prod.codigo}</span>
+    </div>
 
-  let nuevaCat = prompt(`Modificar Categoría (Ej: Exento / Gravable):`, prod.categoria);
-  if (nuevaCat !== null) prod.categoria = nuevaCat.trim() || prod.categoria;
+    <div style="background:#f8f9fa; padding:10px; border-radius:6px; border-left:4px solid #3498db; margin-bottom:12px;">
+      <h4 style="margin:0 0 8px 0; font-size:12px; color:#2c3e50; text-transform:uppercase;">📌 1. Información General</h4>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+        <div>
+          <label style="font-size:11px; font-weight:bold; color:#555;">Código del Producto:</label>
+          <input type="text" id="ed-cod" value="${prod.codigo}" style="width:100%; padding:6px; box-sizing:border-box; border:1px solid #ccc; border-radius:4px; font-size:12px;">
+        </div>
+        <div>
+          <label style="font-size:11px; font-weight:bold; color:#555;">Categoría:</label>
+          <input type="text" id="ed-cat" value="${prod.categoria || ''}" style="width:100%; padding:6px; box-sizing:border-box; border:1px solid #ccc; border-radius:4px; font-size:12px;">
+        </div>
+      </div>
+      <div style="margin-top:6px;">
+        <label style="font-size:11px; font-weight:bold; color:#555;">Descripción / Nombre:</label>
+        <input type="text" id="ed-desc" value="${prod.descripcion || ''}" style="width:100%; padding:6px; box-sizing:border-box; border:1px solid #ccc; border-radius:4px; font-size:12px;">
+      </div>
+    <div style="display:flex; gap:10px; justify-content:space-between; align-items:center; border-top:1px solid #eee; padding-top:12px;">
+      <button id="btn-eliminar-prod-ed" style="background:#c0392b; color:white; border:none; padding:8px 14px; border-radius:4px; font-weight:bold; cursor:pointer; font-size:12px;">🗑️ Borrar Producto</button>
+      <div style="display:flex; gap:10px;">
+        <button id="btn-save-ed" style="background:#27ae60; color:white; border:none; padding:8px 16px; border-radius:4px; font-weight:bold; cursor:pointer; font-size:12px;">💾 Guardar Cambios</button>
+        <button id="btn-canc-ed" style="background:#95a5a6; color:white; border:none; padding:8px 16px; border-radius:4px; font-weight:bold; cursor:pointer; font-size:12px;">Cancelar</button>
+      </div>
+    </div>
+  `;
 
-  let nuevoPasillo = prompt(`Modificar Pasillo:`, prod.pasillo);
-  if (nuevoPasillo !== null) prod.pasillo = parseInt(nuevoPasillo) || prod.pasillo;
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
 
-  let nuevaUnd = prompt(`Modificar Unidad de Medida (UND):`, prod.und);
-  if (nuevaUnd !== null) prod.und = nuevaUnd.trim() || prod.und;
+  box.querySelector("#btn-eliminar-prod-ed").onclick = () => {
+    solicitarConfirmacion(`¿Está seguro de eliminar por completo el producto "${prod.codigo} - ${prod.descripcion}" y enviarlo a la papelera?`, async () => {
+      document.body.removeChild(overlay);
+      
+      const productoEliminado = inventario.splice(index, 1)[0];
+      if (typeof db !== "undefined" && db && productoEliminado.idDoc) {
+        await db.collection("iapci_stock").doc(productoEliminado.idDoc).delete();
+      }
 
-  let nuevoStockActual = prompt(`Modificar Stock Actual:`, stockActualCalculado);
-  if (nuevoStockActual !== null) {
-    let stockDeseado = parseInt(nuevoStockActual);
-    if (!isNaN(stockDeseado)) {
+      const movLimpioParaPapelera = {
+        fecha: new Date().toLocaleDateString(),
+        codigo: prod.codigo,
+        producto: prod.descripcion,
+        categoria: prod.categoria,
+        pasillo: prod.pasillo,
+        und: prod.und,
+        precio: prod.precioBs,
+        entrada: 0,
+        salida: prod.stockInic + prod.entradas - prod.salidas,
+        observacion: `ELIMINADO DESDE MODAL DE STOCK`,
+        timestamp: Date.now(),
+        productoEliminadoSnapshot: productoEliminado
+      };
+
+      papeleraMovimientos.unshift(movLimpioParaPapelera);
+
+      if (typeof db !== "undefined" && db) {
+        const docRefPapelera = await db.collection("iapci_papelera").add(movLimpioParaPapelera);
+        movLimpioParaPapelera.idDoc = docRefPapelera.id;
+      }
+
+      actualizarTodo();
+      mostrarToast(`🗑️ El producto "${prod.codigo}" ha sido eliminado y enviado a la papelera.`, "info");
+    });
+  };
+
+  box.querySelector("#btn-save-ed").onclick = async () => {
+    const nuevoCodigo = box.querySelector("#ed-cod").value.trim().toUpperCase() || prod.codigo;
+    const nuevaDesc = box.querySelector("#ed-desc").value.trim().toUpperCase() || prod.descripcion;
+    const nuevaCat = box.querySelector("#ed-cat").value.trim() || prod.categoria;
+    const nuevoPas = parseInt(box.querySelector("#ed-pas").value) || 0;
+    const nuevaUnd = box.querySelector("#ed-und").value.trim() || prod.und;
+    const nuevoPrecio = parseFloat(box.querySelector("#ed-precio").value) || prod.precioBs;
+    const nuevoStockMin = parseInt(box.querySelector("#ed-stkmin").value) || (prod.stockMin !== undefined ? prod.stockMin : 12);
+    const nuevaObs = box.querySelector("#ed-obs").value.trim() || prod.obs;
+
+    const stockDeseado = parseInt(box.querySelector("#ed-stk").value);
+
+    let cambios = [];
+    if (nuevoCodigo !== prod.codigo) cambios.push("Código");
+    if (nuevaDesc !== prod.descripcion) cambios.push("Descripción");
+    if (nuevaCat !== prod.categoria) cambios.push("Categoría");
+    if (nuevoPas !== prod.pasillo) cambios.push("Pasillo");
+    if (nuevaUnd !== prod.und) cambios.push("Unidad");
+    if (nuevoPrecio !== prod.precioBs) cambios.push("Precio Bs");
+    if (nuevoStockMin !== prod.stockMin) cambios.push("Stock Mínimo");
+    if (nuevaObs !== prod.obs) cambios.push("Observaciones");
+
+    if (!isNaN(stockDeseado) && stockDeseado !== stockActualCalculado) {
       prod.stockInic = stockDeseado - prod.entradas + prod.salidas;
       if (prod.stockInic < 0) prod.stockInic = 0;
+      cambios.push(`Stock (${stockActualCalculado} ➔ ${stockDeseado})`);
     }
-  }
-  
-  inventario[index] = prod;
 
-  if (typeof db !== "undefined" && db && prod.idDoc) {
-    const docRef = db.collection("iapci_stock").doc(prod.idDoc);
-    const prodCopia = { ...prod };
-    delete prodCopia.idDoc;
-    await docRef.set(prodCopia);
-  }
-  actualizarTodo();
+    prod.codigo = nuevoCodigo;
+    prod.descripcion = nuevaDesc;
+    prod.categoria = nuevaCat;
+    prod.pasillo = nuevoPas;
+    prod.und = nuevaUnd;
+    prod.precioBs = nuevoPrecio;
+    prod.stockMin = nuevoStockMin;
+    prod.obs = nuevaObs;
+
+    inventario[index] = prod;
+
+    if (typeof db !== "undefined" && db && prod.idDoc) {
+      const docRef = db.collection("iapci_stock").doc(prod.idDoc);
+      const prodCopia = { ...prod };
+      delete prodCopia.idDoc;
+      await docRef.set(prodCopia);
+    }
+
+    document.body.removeChild(overlay);
+    actualizarTodo(prod.codigo);
+
+    const detalleCambios = cambios.length > 0 ? ` (${cambios.join(", ")})` : "";
+    mostrarToast(`✅ Producto "${prod.codigo}" modificado por ${usuarioActual.rol}${detalleCambios}.`, "success");
+  };
+
+  box.querySelector("#btn-canc-ed").onclick = () => {
+    document.body.removeChild(overlay);
+  };
 }
 
 function limpiarFormulario() {
@@ -543,6 +722,7 @@ function limpiarFormulario() {
   document.getElementById("f-und").value = "";
   document.getElementById("f-precio").value = "";
   document.getElementById("f-cantidad").value = "";
+  document.getElementById("f-stock-min").value = "12";
   document.getElementById("f-observacion").value = "";
 }
 
@@ -555,21 +735,22 @@ function nuevoProducto() {
     const und = document.getElementById("f-und").value.trim() || "UND";
     const precioBs = parseFloat(document.getElementById("f-precio").value) || 0;
     const cantInic = parseInt(document.getElementById("f-cantidad").value) || 0;
+    const stockMinInput = parseInt(document.getElementById("f-stock-min")?.value) || 12;
     const obs = document.getElementById("f-observacion").value.trim() || `Nuevo producto ${new Date().toLocaleDateString()}`;
 
     if (!codigo || !descripcion) {
-      alert("Por favor introduce el Código y la Descripción antes de crear el nuevo producto.");
+      mostrarToast("Por favor introduce el Código y la Descripción antes de crear el nuevo producto.", "warning");
       return;
     }
 
     const existe = inventario.some(p => p.codigo.toUpperCase() === codigo);
     if (existe) {
-      alert("❌ El código de producto ya existe en el inventario. Utilice 'Registrar Entrada' para reabastecer.");
+      mostrarToast("❌ El código de producto ya existe en el inventario. Utilice 'Registrar Entrada' para reabastecer.", "warning");
       return;
     }
 
     const nuevoProdObj = {
-      codigo, descripcion, categoria, pasillo, und, precioBs, stockInic: cantInic, entradas: 0, salidas: 0, stockMin: 12, obs
+      codigo, descripcion, categoria, pasillo, und, precioBs, stockInic: cantInic, entradas: 0, salidas: 0, stockMin: stockMinInput, obs
     };
 
     const nuevoHistObj = {
@@ -585,6 +766,7 @@ function nuevoProducto() {
       actualizarTodo(null, 0);
     }
 
+    mostrarToast(`✅ Producto "${descripcion}" guardado exitosamente.`, "success");
     limpiarFormulario();
     cambiarPestana('registro');
   });
@@ -593,7 +775,7 @@ function nuevoProducto() {
 function buscarCodigo() {
   const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
   if (!codigo) {
-    alert("Escribe un Código de producto en el campo para buscar.");
+    mostrarToast("Escribe un Código de producto en el campo para buscar.", "warning");
     return;
   }
 
@@ -604,6 +786,9 @@ function buscarCodigo() {
     document.getElementById("f-categoria").value = prod.categoria;
     document.getElementById("f-pasillo").value = prod.pasillo;
     document.getElementById("f-und").value = prod.und;
+    if (document.getElementById("f-stock-min")) {
+      document.getElementById("f-stock-min").value = prod.stockMin !== undefined ? prod.stockMin : 12;
+    }
     
     document.getElementById("f-precio").value = "";
     document.getElementById("f-cantidad").value = "";
@@ -612,7 +797,7 @@ function buscarCodigo() {
     cambiarPestana('stock');
     renderTablaStock(prod.codigo);
   } else {
-    alert("El código ingresado no existe en el registro.");
+    mostrarToast("El código ingresado no existe en el registro.", "warning");
   }
 }
 
@@ -658,10 +843,11 @@ async function registrarEntrada() {
       actualizarTodo(null, 0);
     }
 
+    mostrarToast(`📥 Entrada de ${cant} ${prod.und} registrada.`, "success");
     limpiarFormulario();
     cambiarPestana('registro');
   } else {
-    alert("Código no hallado o cantidad inválida.");
+    mostrarToast("Código no hallado o cantidad inválida.", "warning");
   }
 }
 
@@ -675,7 +861,7 @@ async function registrarSalida() {
   if (prod && cant > 0) {
     const stockActualCalculado = prod.stockInic + prod.entradas - prod.salidas;
     if (cant > stockActualCalculado) {
-      alert(`⚠️ Advertencia: La cantidad a retirar (${cant}) supera el stock disponible (${stockActualCalculado}).`);
+      mostrarToast(`⚠️ Advertencia: La cantidad a retirar (${cant}) supera el stock disponible (${stockActualCalculado}).`, "warning");
     }
 
     const nuevasSalidas = prod.salidas + cant;
@@ -709,14 +895,13 @@ async function registrarSalida() {
       actualizarTodo(null, 0);
     }
     
+    mostrarToast(`📤 Salida de ${cant} ${prod.und} registrada.`, "success");
     limpiarFormulario();
     cambiarPestana('registro');
   } else {
-    alert("Código no hallado o cantidad inválida.");
+    mostrarToast("Código no hallado o cantidad inválida.", "warning");
   }
 }
-
-// --- 7. HISTORIAL Y ELIMINACIÓN DE REGISTROS ---
 
 function renderTablaHistorial(indiceResaltar = null) {
   const tbody = document.getElementById("cuerpo-tabla-historial");
@@ -774,77 +959,67 @@ function renderTablaHistorial(indiceResaltar = null) {
 
 function eliminarRegistro() {
   verificarPermisoAdmin(async () => {
-    if (historialMovimientos.length > 0) {
-      if (papeleraMovimientos.length >= CAPACIDAD_MAXIMA_PAPELERA) {
-        alert("⚠️ Advertencia: La papelera ha alcanzado su capacidad máxima de 80 registros.");
+    try {
+      if (!historialMovimientos || historialMovimientos.length === 0) {
+        mostrarToast("No hay registros en el historial para eliminar.", "info");
         return;
       }
 
-      const movEliminado = typeof db !== "undefined" && db ? { ...historialMovimientos[0] } : historialMovimientos.shift();
-      const idDocHistorial = movEliminado.idDoc;
-      delete movEliminado.idDoc;
+      if (papeleraMovimientos.length >= CAPACIDAD_MAXIMA_PAPELERA) {
+        mostrarToast("⚠️ Advertencia: La papelera ha alcanzado su capacidad máxima de 80 registros. Vacíe la papelera para continuar.", "warning");
+        return;
+      }
 
-      const indexProd = inventario.findIndex(p => p.codigo.toUpperCase() === movEliminado.codigo.toUpperCase());
-      
-      if (indexProd !== -1) {
-        let prod = { ...inventario[indexProd] };
+      solicitarConfirmacion("¿Desea eliminar el último movimiento registrado, remover completamente el producto del inventario de estatus y stock, y enviarlo a la papelera?", async () => {
+        try {
+          const movEliminado = historialMovimientos.shift();
+          if (!movEliminado) return;
 
-        if (movEliminado.entrada > 0) {
-          if (prod.stockInic >= movEliminado.entrada && prod.entradas === 0) {
-            prod.stockInic -= movEliminado.entrada;
-          } else {
-            prod.entradas -= movEliminado.entrada;
-            if (prod.entradas < 0) {
-              prod.stockInic += prod.entradas;
-              prod.entradas = 0;
-              if (prod.stockInic < 0) prod.stockInic = 0;
+          const idDocHistorial = movEliminado.idDoc;
+          const codigoMov = (movEliminado.codigo || "").toUpperCase();
+          const indexProd = inventario.findIndex(p => (p.codigo || "").toUpperCase() === codigoMov);
+
+          let productoEliminadoInventario = null;
+          if (indexProd !== -1) {
+            productoEliminadoInventario = inventario.splice(indexProd, 1)[0];
+            if (typeof db !== "undefined" && db && productoEliminadoInventario.idDoc) {
+              await db.collection("iapci_stock").doc(productoEliminadoInventario.idDoc).delete();
             }
           }
-        }
-        
-        if (movEliminado.salida > 0) {
-          prod.salidas -= movEliminado.salida;
-          if (prod.salidas < 0) prod.salidas = 0;
-        }
 
-        let stockCalculadoFinal = prod.stockInic + prod.entradas - prod.salidas;
-        let aunTieneMovimientosEnHistorial = historialMovimientos.slice(1).some(m => m.codigo.toUpperCase() === prod.codigo.toUpperCase());
+          const movLimpioParaPapelera = { 
+            ...movEliminado, 
+            productoEliminadoSnapshot: productoEliminadoInventario || null 
+          };
+          delete movLimpioParaPapelera.idDoc;
+          movLimpioParaPapelera.timestamp = Date.now();
 
-        if (typeof db !== "undefined" && db && prod.idDoc) {
-          if (stockCalculadoFinal <= 0 && prod.stockInic === 0 && prod.entradas === 0 && !aunTieneMovimientosEnHistorial) {
-            await db.collection("iapci_stock").doc(prod.idDoc).delete();
-          } else {
-            await db.collection("iapci_stock").doc(prod.idDoc).update({
-              stockInic: prod.stockInic,
-              entradas: prod.entradas,
-              salidas: prod.salidas
-            });
+          papeleraMovimientos.unshift(movLimpioParaPapelera);
+
+          if (typeof db !== "undefined" && db) {
+            try {
+              if (idDocHistorial) {
+                await db.collection("iapci_historial").doc(idDocHistorial).delete();
+              }
+              const docRefPapelera = await db.collection("iapci_papelera").add(movLimpioParaPapelera);
+              movLimpioParaPapelera.idDoc = docRefPapelera.id;
+            } catch (eFire) {
+              console.error("Error al sincronizar papelera/historial en Firestore:", eFire);
+            }
           }
-        } else {
-          if (stockCalculadoFinal <= 0 && prod.stockInic === 0 && prod.entradas === 0 && !aunTieneMovimientosEnHistorial) {
-            inventario.splice(indexProd, 1);
-          } else {
-            inventario[indexProd] = prod;
-          }
+
+          actualizarTodo();
+          mostrarToast("🗑 El registro ha sido eliminado del estatus y stock y enviado a la papelera correctamente.", "info");
+        } catch (err) {
+          console.error("Error al eliminar registro:", err);
+          mostrarToast("❌ Ocurrió un error al procesar la eliminación.", "error");
         }
-      }
-
-      if (typeof db !== "undefined" && db) {
-        if (idDocHistorial) await db.collection("iapci_historial").doc(idDocHistorial).delete();
-        await db.collection("iapci_papelera").add({ ...movEliminado, timestamp: Date.now() });
-      } else {
-        papeleraMovimientos.unshift(movEliminado);
-        actualizarTodo();
-      }
-
-      alert("✅ El último registro ha sido eliminado del historial, descontado del stock correctamente, y enviado a la papelera.");
-    } else {
-      alert("No hay registros en el historial para eliminar.");
+      });
+    } catch (e) {
+      console.error("Error en permisos de eliminación:", e);
     }
   });
 }
-
-// --- 8. REPORTE GENERAL ---
 
 function renderReporteGeneral() {
   let totalProd = inventario.length;
@@ -857,12 +1032,13 @@ function renderReporteGeneral() {
     const stockAct = prod.stockInic + prod.entradas - prod.salidas;
     const valBs = stockAct * prod.precioBs;
     const catNombre = prod.categoria ? prod.categoria.trim() : "General";
+    const minStockVal = prod.stockMin !== undefined ? prod.stockMin : 12;
 
     valorTotalBs += valBs;
     stockDisponible += stockAct;
     totalSalidas += prod.salidas;
 
-    if (stockAct > prod.stockMin) {
+    if (stockAct > minStockVal) {
       buenNivel++;
     } else if (stockAct > 0) {
       bajoNivel++;
@@ -881,7 +1057,7 @@ function renderReporteGeneral() {
 
     if (stockAct === 0) {
       categoriasMap[catNombre].tieneAgotado = true;
-    } else if (stockAct <= prod.stockMin) {
+    } else if (stockAct <= minStockVal) {
       categoriasMap[catNombre].tieneBajoNivel = true;
     }
   });
@@ -937,8 +1113,6 @@ function renderReporteGeneral() {
     if (document.getElementById("cat-estado-general")) document.getElementById("cat-estado-general").textContent = estadoGlobalGeneral;
   }
 }
-
-// --- 9. PAPELERA DE RECICLAJE Y CONTROLES MODALES ---
 
 function toggleModalPapelera() {
   const modal = document.getElementById("modal-papelera");
@@ -1054,115 +1228,123 @@ function restaurarRegistroPapelera(index) {
       const idDocPapelera = movRestaurar.idDoc;
       
       papeleraMovimientos.splice(index, 1);
+      
+      const productoSnapshot = movRestaurar.productoEliminadoSnapshot;
       delete movRestaurar.idDoc;
+      delete movRestaurar.productoEliminadoSnapshot;
+
+      const codigoRestaurar = (movRestaurar.codigo || "").toUpperCase();
+
+      historialMovimientos.unshift({ ...movRestaurar, timestamp: Date.now() });
+
+      let prod = inventario.find(p => (p.codigo || "").toUpperCase() === codigoRestaurar);
+      
+      if (!prod) {
+        const nuevoProd = productoSnapshot ? { ...productoSnapshot } : {
+          codigo: movRestaurar.codigo,
+          descripcion: movRestaurar.producto,
+          categoria: movRestaurar.categoria || "General",
+          pasillo: movRestaurar.pasillo || 0,
+          und: movRestaurar.und || "UND",
+          precioBs: movRestaurar.precio || 0,
+          stockInic: movRestaurar.entrada > 0 ? movRestaurar.entrada : 0,
+          entradas: 0,
+          salidas: movRestaurar.salida > 0 ? movRestaurar.salida : 0,
+          stockMin: 12,
+          obs: movRestaurar.observacion || "RESTAURADO DESDE PAPELERA"
+        };
+        
+        delete nuevoProd.idDoc;
+        inventario.push(nuevoProd);
+
+        if (typeof db !== "undefined" && db) {
+          const docRefStock = await db.collection("iapci_stock").add(nuevoProd);
+          nuevoProd.idDoc = docRefStock.id;
+        }
+      } else {
+        if (movRestaurar.entrada > 0) {
+          prod.entradas += movRestaurar.entrada;
+        }
+        if (movRestaurar.salida > 0) {
+          prod.salidas += movRestaurar.salida;
+        }
+        if (movRestaurar.precio > 0) prod.precioBs = movRestaurar.precio;
+
+        if (typeof db !== "undefined" && db && prod.idDoc) {
+          await db.collection("iapci_stock").doc(prod.idDoc).update({
+            stockInic: prod.stockInic,
+            entradas: prod.entradas,
+            salidas: prod.salidas,
+            precioBs: prod.precioBs
+          });
+        }
+      }
 
       if (typeof db !== "undefined" && db) {
-        if (idDocPapelera) await db.collection("iapci_papelera").doc(idDocPapelera).delete();
+        if (idDocPapelera) {
+          await db.collection("iapci_papelera").doc(idDocPapelera).delete();
+        }
         await db.collection("iapci_historial").add({ ...movRestaurar, timestamp: Date.now() });
-
-        const prodSnap = await db.collection("iapci_stock").where("codigo", "==", movRestaurar.codigo.toUpperCase()).get();
-        if (!prodSnap.empty) {
-          const docProd = prodSnap.docs[0];
-          const dataProd = docProd.data();
-          let incEntrada = movRestaurar.entrada > 0 ? dataProd.stockInic + movRestaurar.entrada : dataProd.stockInic;
-          let incSalida = movRestaurar.salida > 0 ? dataProd.salidas + movRestaurar.salida : dataProd.salidas;
-          await db.collection("iapci_stock").doc(docProd.id).update({
-            stockInic: incEntrada,
-            salidas: incSalida
-          });
-        } else if (movRestaurar.entrada > 0) {
-          await db.collection("iapci_stock").add({
-            codigo: movRestaurar.codigo,
-            descripcion: movRestaurar.producto,
-            categoria: movRestaurar.categoria || "General",
-            pasillo: movRestaurar.pasillo || 0,
-            und: movRestaurar.und || "UND",
-            precioBs: movRestaurar.precio,
-            stockInic: movRestaurar.entrada,
-            entradas: 0,
-            salidas: 0,
-            stockMin: 12,
-            obs: movRestaurar.observacion
-          });
-        }
-      } else {
-        historialMovimientos.unshift(movRestaurar);
-        let prod = inventario.find(p => p.codigo.toUpperCase() === movRestaurar.codigo.toUpperCase());
-        if (!prod && movRestaurar.entrada > 0) {
-          inventario.push({
-            codigo: movRestaurar.codigo,
-            descripcion: movRestaurar.producto,
-            categoria: movRestaurar.categoria || "General",
-            pasillo: movRestaurar.pasillo || 0,
-            und: movRestaurar.und || "UND",
-            precioBs: movRestaurar.precio,
-            stockInic: movRestaurar.entrada,
-            entradas: 0,
-            salidas: 0,
-            stockMin: 12,
-            obs: movRestaurar.observacion
-          });
-        } else if (prod) {
-          if (movRestaurar.entrada > 0) prod.stockInic += movRestaurar.entrada;
-          if (movRestaurar.salida > 0) prod.salidas += movRestaurar.salida;
-        }
-        actualizarTodo();
       }
 
+      actualizarTodo(codigoRestaurar);
+      mostrarToast("✅ Registro restaurado de la papelera exitosamente y devuelto al inventario de estatus y stock.", "success");
       renderTablaPapelera();
-      alert("✅ Registro restaurado correctamente y sincronizado en stock.");
-    }
-  });
-}
-
-function vaciarPapelera() {
-  verificarPermisoAdmin(async () => {
-    if (papeleraMovimientos.length === 0) {
-      alert("La papelera ya está vacía.");
-      return;
-    }
-    if (confirm("⚠️ ¿Está seguro de que desea vaciar permanentemente toda la papelera?")) {
-      if (typeof db !== "undefined" && db) {
-        const snapshot = await db.collection("iapci_papelera").get();
-        const batch = db.batch();
-        snapshot.forEach(doc => batch.delete(doc.ref));
-        await batch.commit();
-      } else {
-        papeleraMovimientos = [];
-        guardarEstadoSistema();
-      }
-      renderTablaPapelera();
-      alert("✅ Papelera vaciada con éxito.");
     }
   });
 }
 
 function eliminarSeleccionadosPapelera() {
   verificarPermisoAdmin(async () => {
-    const checkboxes = document.querySelectorAll('.chk-item-papelera:checked');
-    
-    if (checkboxes.length === 0) {
-      alert("⚠️ Por favor selecciona al menos un registro de la papelera usando las casillas para poder eliminarlo.");
+    const seleccionados = Array.from(document.querySelectorAll('.chk-item-papelera:checked'))
+      .map(chk => parseInt(chk.value))
+      .sort((a, b) => b - a);
+
+    if (seleccionados.length === 0) {
+      mostrarToast("⚠️ Seleccione al menos un elemento de la papelera.", "warning");
       return;
     }
 
-    if (confirm(`¿Estás segura de eliminar permanentemente ${checkboxes.length} registro(s) seleccionado(s)?`)) {
-      const indicesAEliminar = Array.from(checkboxes).map(chk => parseInt(chk.value)).sort((a, b) => b - a);
-
-      for (const index of indicesAEliminar) {
+    solicitarConfirmacion(`¿Está seguro de eliminar definitivamente los ${seleccionados.length} elementos seleccionados?`, async () => {
+      for (const index of seleccionados) {
         if (index >= 0 && index < papeleraMovimientos.length) {
           const item = papeleraMovimientos[index];
           if (typeof db !== "undefined" && db && item.idDoc) {
             await db.collection("iapci_papelera").doc(item.idDoc).delete();
-          } else {
-            papeleraMovimientos.splice(index, 1);
           }
+          papeleraMovimientos.splice(index, 1);
         }
       }
-
-      if (typeof db === "undefined" || !db) guardarEstadoSistema();
+      guardarEstadoSistema();
+      mostrarToast(`✅ ${seleccionados.length} elementos eliminados permanentemente.`, "info");
       renderTablaPapelera();
-      alert("✅ Los registros seleccionados han sido eliminados definitivamente.");
+    });
+  });
+}
+
+function vaciarPapelera() {
+  verificarPermisoAdmin(async () => {
+    if (papeleraMovimientos.length === 0) {
+      mostrarToast("La papelera ya está vacía.", "info");
+      return;
     }
+
+    solicitarConfirmacion("⚠️ ¿Está seguro de que desea vaciar permanentemente toda la papelera? Esta acción no se puede deshacer.", async () => {
+      try {
+        if (typeof db !== "undefined" && db) {
+          const snapshot = await db.collection("iapci_papelera").get();
+          const batch = db.batch();
+          snapshot.forEach(doc => batch.delete(doc.ref));
+          await batch.commit();
+        }
+      } catch (error) {
+        console.error("Error al vaciar papelera en Firestore:", error);
+      }
+
+      papeleraMovimientos = [];
+      guardarEstadoSistema();
+      renderTablaPapelera();
+      mostrarToast("✅ Papelera vaciada con éxito.", "success");
+    });
   });
 }
