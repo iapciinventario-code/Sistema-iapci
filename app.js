@@ -134,6 +134,27 @@ let historialMovimientos = obtenerHistorialInicial();
 let papeleraMovimientos = obtenerPapeleraInicial();
 const CAPACIDAD_MAXIMA_PAPELERA = 80;
 
+// --- STREAMING_CHUNK:Verificando sesión previa al cargar ---
+window.addEventListener("DOMContentLoaded", () => {
+  const usuarioGuardado = localStorage.getItem("iapci_usuario_activo_nombre");
+  if (usuarioGuardado && usuarios[usuarioGuardado]) {
+    usuarioActual = usuarios[usuarioGuardado];
+    document.getElementById("pantalla-login")?.classList.add("oculto");
+    document.getElementById("pantalla-sistema")?.classList.remove("oculto");
+    document.getElementById("rol-usuario-lbl").textContent = `Usuario: ${usuarioGuardado.toUpperCase()} (${usuarioActual.rol})`;
+    document.getElementById("f-fecha").value = new Date().toLocaleDateString();
+    
+    const inputTasaElem = document.getElementById("f-tasa-cambio");
+    if (inputTasaElem) inputTasaElem.value = tasaCambioBCV;
+
+    const lblTasa = document.getElementById("lbl-tasa-actual");
+    if (lblTasa) lblTasa.textContent = `Bs. ${tasaCambioBCV.toFixed(2)} / $`;
+
+    aplicarPermisos();
+    actualizarTodo();
+  }
+});
+
 // --- 3. PERSISTENCIA Y ESCUCHADORES EN TIEMPO REAL (FIREBASE & LOCALSTORAGE) ---
 
 function guardarEstadoSistema() {
@@ -494,11 +515,7 @@ function cerrarSesion() {
   document.getElementById("input-clave").value = "";
 }
 
-window.addEventListener("beforeunload", function() {
-  if (usuarioActual) {
-    localStorage.removeItem(`iapci_sesion_activa_${usuarioActual.rol}`);
-  }
-});
+// Eliminado el evento beforeunload que limpiaba el usuario activo para permitir persistencia al recargar la página.
 
 // --- 6. OPERACIONES DE INVENTARIO Y STOCK ---
 
