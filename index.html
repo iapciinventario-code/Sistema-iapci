@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SISTEMA IAPCI - Inventario Automatizado</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  
+  <!-- PANTALLA DE LOGIN -->
+  <div id="pantalla-login" class="login-container">
+    <div class="login-card">
+      <div class="logo-iapci-container">
+        <svg width="45" height="45" viewBox="0 0 100 100" class="logo-svg">
+          <path d="M50 20 A30 30 0 1 0 80 50 A30 30 0 0 0 50 20 Z M50 35 A15 15 0 1 1 35 50 A15 15 0 0 1 50 35 Z" fill="none" stroke="#ffffff" stroke-width="6"/>
+          <text x="50" y="55" font-size="20" font-weight="bold" fill="#ffffff" text-anchor="middle">$</text>
+          <path d="M75 55 A20 20 0 1 0 95 75 A20 20 0 0 0 75 55 Z M75 65 A10 10 0 1 1 65 75 A10 10 0 0 1 75 65 Z" fill="none" stroke="#ffffff" stroke-width="5"/>
+        </svg>
+        <div class="logo-iapci-textos">
+          <h1 class="logo-title">IAPCI</h1>
+          <p class="logo-subtitle">Inventario Automatizado para el Control Interno</p>
+        </div>
+      </div>
+
+      <div class="campo-login">
+        <label>USUARIO:</label>
+        <input type="text" id="input-usuario" placeholder="Ej: admin">
+      </div>
+      <div class="campo-login">
+        <label>CLAVE:</label>
+        <input type="password" id="input-clave" placeholder="••••••••">
+      </div>
+      <button onclick="iniciarSesion()" class="btn-login">INGRESAR AL SISTEMA</button>
+      <p id="mensaje-error" class="error"></p>
+    </div>
+  </div>
+
+  <!-- CONEXIÓN A FIREBASE FIRESTORE EN LA NUBE -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <script>
+    // Configuración de tu consola de Firebase
+    const firebaseConfig = {
+      apiKey: "TU_API_KEY_AQUI", // 👈 Reemplaza por tu API Key real
+      authDomain: "sistema-iapci.firebaseapp.com",
+      projectId: "sistema-iapci",
+      storageBucket: "sistema-iapci.appspot.com",
+      messagingSenderId: "123456789",
+      appId: "1:123456789:web:abcdef..."
+    };
+
+    // Inicializar Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // Activar persistencia offline
+    db.enablePersistence()
+      .catch((err) => {
+        if (err.code == 'failed-precondition') {
+          console.warn('La persistencia falló: múltiples pestañas abiertas');
+        } else if (err.code == 'unimplemented') {
+          console.warn('El navegador no soporta persistencia');
+        }
+      });
+
+    // Compartir la referencia en window para que app.js la use
+    window.db = db;
+    console.log("🔥 Firebase Firestore conectado con éxito");
+
+    /* 
+    // ==========================================
+    // SCRIPT DE INICIALIZACIÓN DE DATOS BASE (OPCIONAL)
+    // Descomenta esta función si deseas sembrar los datos por primera vez
+    // ==========================================
+    async function inicializarDatosBase() {
+      try {
+        await db.collection("iapci_tasa").doc("bcv").set({ tasa: 36.50, fecha: "29/08/2026" });
+        await db.collection("iapci_usuarios").doc("soporte").set({ clave: "soporte123", rol: "Soporte Técnico" });
+        await db.collection("iapci_usuarios").doc("admin").set({ clave: "admin123", rol: "Administrador" });
+        await db.collection("iapci_usuarios").doc("asistente").set({ clave: "asistente123", rol: "Asistente" });
+        console.log("✅ Datos base sembrados con éxito.");
+      } catch (e) {
+        console.error("❌ Error al inicializar datos base: ", e);
+      }
+    }
+    // inicializarDatosBase();
+    */
+  </script>
+
+  <!-- Script principal del sistema -->
+  <script src="app.js"></script>
+
+  <!-- MODAL PARA CAMBIAR CREDENCIALES DE USUARIOS (CTRL + K) -->
+  <div id="modal-usuarios" class="oculto" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 9999;">
+    <div style="background: white; padding: 25px; border-radius: 8px; width: 350px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); font-family: sans-serif;">
+      <h3 style="margin-top: 0; color: #2c3e50; text-align: center;">⚙️ Cambiar Usuarios y Claves</h3>
+      <p style="font-size: 12px; color: #666; text-align: center;">Modifica las credenciales de acceso para los tres roles del sistema.</p>
+      
+      <div style="margin-bottom: 12px;">
+        <label style="font-size: 13px; font-weight: bold; display: block; color: #333;">Soporte Técnico:</label>
+        <input type="text" id="cfg-user-soporte" value="soporte" style="width: 100%; padding: 6px; box-sizing: border-box; margin-bottom: 4px;" placeholder="Nuevo usuario">
+        <input type="password" id="cfg-pass-soporte" placeholder="Nueva clave" style="width: 100%; padding: 6px; box-sizing: border-box;">
+      </div>
+
+      <div style="margin-bottom: 12px;">
+        <label style="font-size: 13px; font-weight: bold; display: block; color: #333;">Administrador:</label>
+        <input type="text" id="cfg-user-admin" value="admin" style="width: 100%; padding: 6px; box-sizing: border-box; margin-bottom: 4px;" placeholder="Nuevo usuario">
+        <input type="password" id="cfg-pass-admin" placeholder="Nueva clave" style="width: 100%; padding: 6px; box-sizing: border-box;">
+      </div>
+
+      <div style="margin-bottom: 15px;">
+        <label style="font-size: 13px; font-weight: bold; display: block; color: #333;">Asistente:</label>
+        <input type="text" id="cfg-user-asistente" value="asistente" style="width: 100%; padding: 6px; box-sizing: border-box; margin-bottom: 4px;" placeholder="Nuevo usuario">
+        <input type="password" id="cfg-pass-asistente" placeholder="Nueva clave" style="width: 100%; padding: 6px; box-sizing: border-box;">
+      </div>
+
+      <div style="display: flex; gap: 10px;">
+        <button onclick="guardarNuevosUsuarios()" style="flex: 1; background: #27ae60; color: white; border: none; padding: 10px; border-radius: 4px; cursor: pointer; font-weight: bold;">Guardar Cambios</button>
+        <button onclick="toggleModalUsuarios()" style="flex: 1; background: #c0392b; color: white; border: none; padding: 10px; border-radius: 4px; cursor: pointer; font-weight: bold;">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL PARA PAPELERA DE RECICLAJE Y RESTAURACIÓN -->
+  <div id="modal-papelera" class="oculto" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 9999;">
+    <div style="background: white; padding: 25px; border-radius: 8px; width: 950px; max-width: 95%; box-shadow: 0 4px 15px rgba(0,0,0,0.3); font-family: sans-serif;">
+      
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 2px solid #eee; padding-bottom: 12px;">
+        <div>
+          <h3 style="margin: 0; color: #2c3e50;">🗑️ Papelera de Registros Eliminados</h3>
+          <p style="font-size: 11px; color: #666; margin: 3px 0 0 0;">Gestión de elementos eliminados, restauración y borrado definitivo.</p>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button onclick="eliminarSeleccionadosPapelera()" style="background:#ffc107; color:#333; border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-weight:bold; font-size: 12px;" title="Eliminar registros seleccionados">Eliminar</button>
+          <button onclick="vaciarPapeleraSegura()" style="background:#dc3545; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-weight:bold; font-size: 12px;" title="Vaciar toda la papelera">Vaciar Papelera</button>
+          <button onclick="toggleModalPapelera()" style="background: #7f8c8d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px;">Cerrar</button>
+        </div>
+      </div>
+
+      <div id="cuerpo-tabla-papelera">
+        <!-- Renderizado dinámico desde JS -->
+      </div>
+
+    </div>
+  </div>
+
+  <!-- SISTEMA PRINCIPAL -->
+  <div id="pantalla-sistema" class="oculto">
+    <header>
+      <div class="header-branding">
+        <div class="logo-header">
+          <div class="logo-iapci-container">
+            <svg width="38" height="38" viewBox="0 0 100 100">
+              <path d="M50 20 A30 30 0 1 0 80 50 A30 30 0 0 0 50 20 Z M50 35 A15 15 0 1 1 35 50 A15 15 0 0 1 50 35 Z" fill="none" stroke="#ffffff" stroke-width="6"/>
+              <text x="50" y="56" font-size="20" font-weight="bold" fill="#ffffff" text-anchor="middle">$</text>
+              <path d="M75 55 A20 20 0 1 0 95 75 A20 20 0 0 0 75 55 Z M75 65 A10 10 0 1 1 65 75 A10 10 0 0 1 75 65 Z" fill="none" stroke="#ffffff" stroke-width="5"/>
+            </svg>
+            <div class="logo-iapci-textos">
+              <span class="logo-title" style="font-size: 1.3rem;">IAPCI</span>
+              <span class="logo-subtitle">Inventario Automatizado para el Control Interno</span>
+            </div>
+          </div>
+        </div>
+        <div class="header-titulo-sistema">
+          <span class="icono-tienda">🏪</span>
+          <h2>SISTEMA DE INVENTARIO — VÍVERES Y CONSUMIBLES</h2>
+        </div>
+      </div>
+      
+      <div class="header-usuario">
+        <span id="rol-usuario-lbl" class="badge-rol"></span>
+        <button onclick="toggleModalPapelera()" class="btn-logout" style="background: #e67e22; margin-right: 8px;" title="Papelera de Reciclaje">🗑️ Papelera</button>
+        <button onclick="cerrarSesion()" class="btn-logout">Cerrar Sesión</button>
+      </div>
+    </header>
+
+    <!-- PESTAÑAS (ESTILO EXCEL) -->
+    <nav class="barra-pestanas">
+      <button id="tab-registro" class="btn-tab activa" onclick="cambiarPestana('registro')">INTERFAZ DE REGISTRO</button>
+      <button id="tab-stock" class="btn-tab" onclick="cambiarPestana('stock')">ESTATUS Y STOCK</button>
+      <button id="tab-historial" class="btn-tab" onclick="cambiarPestana('historial')">REGISTRO DE ENTRADAS Y SALIDAS</button>
+      <button id="tab-reporte" class="btn-tab" onclick="cambiarPestana('reporte')">REPORTE GENERAL</button>
+    </nav>
+
+    <main class="contenedor">
+
+      <!-- PESTAÑA 1: INTERFAZ DE REGISTRO -->
+      <div id="vista-registro">
+        <div class="grid-principal">
+          <section class="panel-formulario">
+            <h2>INTERFAZ DE REGISTRO</h2>
+
+            <!-- PANEL TASA DEL DÍA -->
+            <div class="bloque-tasa">
+              <label>💵 TASA DEL DÍA (BCV Bs./$):</label>
+              <input type="number" id="f-tasa-cambio" value="36.50" step="0.01" onchange="actualizarTasa()">
+              <span id="lbl-tasa-actual" class="badge-tasa">Bs. 36.50 / $</span>
+            </div>
+
+            <div class="bloque-datos">
+              <h3>DETALLES DEL PRODUCTO</h3>
+              <div class="form-group"><label>Fecha:</label><input type="text" id="f-fecha" readonly></div>
+              <div class="form-group"><label>Código:</label><input type="text" id="f-codigo" placeholder="Ej: AAA-01"></div>
+              <div class="form-group"><label>Producto:</label><input type="text" id="f-producto"></div>
+              <div class="form-group"><label>Categoría:</label><input type="text" id="f-categoria"></div>
+              <div class="form-group"><label>Pasillo:</label><input type="number" id="f-pasillo"></div>
+              <div class="form-group"><label>Stock Mínimo:</label><input type="number" id="f-stock-min" value="5" placeholder="Ej: 5"></div>
+            </div>
+
+            <div class="bloque-datos">
+              <h3>TRANSACCIÓN DE ENTRADA / SALIDA</h3>
+              <div class="form-group"><label>UND.:</label><input type="text" id="f-und"></div>
+              <div class="form-group"><label>Precio Bs.S:</label><input type="number" id="f-precio" step="0.01"></div>
+              <div class="form-group"><label>Cantidad (Entrada/Salida):</label><input type="number" id="f-cantidad"></div>
+              <div class="form-group"><label>Observaciones:</label><input type="text" id="f-observacion"></div>
+            </div>
+          </section>
+
+          <!-- BOTONES PRINCIPALES -->
+          <section class="panel-botones">
+            <button id="btn-nuevo" onclick="nuevoProducto()" class="btn-accion">📦 Nuevo Producto</button>
+            <button id="btn-buscar" onclick="buscarCodigo()" class="btn-accion">🔍 Buscar Código</button>
+            <button id="btn-entrada" onclick="registrarEntrada()" class="btn-accion">📥 Registro de Entrada</button>
+            <button id="btn-salida" onclick="registrarSalida()" class="btn-accion">📤 Registro de Salida</button>
+            <button id="btn-eliminar" onclick="eliminarRegistro()" class="btn-accion btn-purple">🗑 Eliminar Último Registro</button>
+            <button onclick="limpiarFormulario()" class="btn-accion btn-darkblue">🧹 Limpiar Registro</button>
+          </section>
+        </div>
+      </div>
+
+      <!-- PESTAÑA 2: ESTATUS Y STOCK -->
+      <div id="vista-stock" class="oculto">
+        <section class="seccion-tabla">
+          <h2>ESTADO DE INVENTARIO VÍVERES Y CONSUMIBLES — Bolívares Venezolanos (Bs.S)</h2>
+          <div class="sub-barra-excel">Control de Stock • Entradas y Salidas • Estado Automático de Existencias</div>
+          <table class="tabla-inventario">
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Descripción</th>
+                <th>Categoría</th>
+                <th>Pasillo</th>
+                <th>UND.</th>
+                <th>Precio Bs.</th>
+                <th>Stock Inic.</th>
+                <th>Entradas</th>
+                <th>Salidas</th>
+                <th>Stock Actual</th>
+                <th>Valor Disponible Bs.</th>
+                <th>Stock Min.</th>
+                <th>Estado</th>
+                <th>Observaciones</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="cuerpo-tabla-stock"></tbody>
+            <tfoot>
+              <tr class="fila-total">
+                <td colspan="6"><strong>TOTALES</strong></td>
+                <td id="tot-stock-inic">0</td>
+                <td id="tot-stock-entradas">0</td>
+                <td id="tot-stock-salidas">0</td>
+                <td id="tot-stock-actual">0</td>
+                <td colspan="5"></td>
+              </tr>
+            </tfoot>
+          </table>
+        </section>
+      </div>
+
+      <!-- PESTAÑA 3: REGISTRO DE ENTRADAS Y SALIDAS -->
+      <div id="vista-historial" class="oculto">
+        <section class="seccion-tabla">
+          <h2>INVENTARIO DE VÍVERES Y CONSUMIBLES — REGISTRO DE ENTRADAS Y SALIDAS</h2>
+          <table class="tabla-inventario tabla-historial">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Código</th>
+                <th>Producto</th>
+                <th>Categoría</th>
+                <th>Pasillo</th>
+                <th>UND.</th>
+                <th>Precio Bs.S</th>
+                <th>Precio USD ($)</th>
+                <th>Entrada</th>
+                <th>Salida</th>
+                <th>Precio Total Bs.S</th>
+                <th>Observaciones</th>
+              </tr>
+            </thead>
+            <tbody id="cuerpo-tabla-historial"></tbody>
+            <tfoot>
+              <tr class="fila-total">
+                <td colspan="6"><strong>TOTALES</strong></td>
+                <td id="tot-precio">Bs.S 0,00</td>
+                <td>-</td>
+                <td id="tot-entradas">0</td>
+                <td id="tot-salidas">0</td>
+                <td id="tot-monto-total">Bs.S 0,00</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </section>
+      </div>
+
+      <!-- PESTAÑA 4: REPORTE GENERAL -->
+      <div id="vista-reporte" class="oculto">
+        <div class="subtitulo-reporte">Reporte General</div>
+
+        <div class="cards-grid-top">
+          <div class="card-reporte card-blue">
+            <div class="card-header-icon">📊 TOTAL PRODUCTOS</div>
+            <div id="card-total-productos" class="card-valor">0</div>
+            <div class="card-subtexto">Productos registrados en inventario</div>
+          </div>
+
+          <div class="card-reporte card-blue">
+            <div class="card-header-icon">💰 VALOR TOTAL EN STOCK</div>
+            <div id="card-valor-total" class="card-valor">Bs.S 0,00</div>
+            <div class="card-subtexto">Bs.S = stock actual * precio unitario</div>
+          </div>
+
+          <div class="card-reporte card-brown">
+            <div class="card-header-icon">📦 STOCK DISPONIBLE</div>
+            <div id="card-stock-disponible" class="card-valor">0</div>
+            <div class="card-subtexto">Total de unidades disponibles en inventario</div>
+          </div>
+
+          <div class="card-reporte card-darkblue">
+            <div class="card-header-icon">📋 TOTAL UNIDADES SALIDAS</div>
+            <div id="card-total-salidas" class="card-valor">0</div>
+            <div class="card-subtexto">Total de unidades vendidas / despachadas</div>
+          </div>
+        </div>
+
+        <div class="cards-grid-status">
+          <div class="card-status status-green">
+              <div class="status-titulo">✅ BUEN NIVEL</div>
+              <div id="card-buen-nivel" style="font-size: 28px; font-weight: bold; margin: 5px 0;">0</div>
+              <div class="status-sub">Productos con stock sobre el mínimo</div>
+          </div>
+          
+          <div class="card-status status-amber">
+              <div class="status-titulo">⚠️ BAJO NIVEL</div>
+              <div id="card-bajo-nivel" style="font-size: 28px; font-weight: bold; margin: 5px 0;">0</div>
+              <div class="status-sub">Productos con stock ≤ stock mínimo</div>
+          </div>
+          
+          <div class="card-status status-red">
+              <div class="status-titulo">🚫 AGOTADOS</div>
+              <div id="card-agotados" style="font-size: 28px; font-weight: bold; margin: 5px 0;">0</div>
+              <div class="status-sub">Productos con stock = 0 urgente</div>
+          </div>
+        </div>
+
+        <div class="panel-reporte-sec" style="margin-top: 15px;">
+          <div class="sec-titulo">📊 RESUMEN POR CATEGORÍA</div>
+          <table class="tabla-inventario">
+            <thead>
+              <tr>
+                <th>Categoría</th>
+                <th>Productos</th>
+                <th>Stock Total</th>
+                <th>Valor Stock Bs.</th>
+                <th>Estado General</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-resumen-categoria"></tbody>
+            <tfoot>
+              <tr class="fila-total" style="font-weight: bold; background-color: #2c3e50; color: white;">
+                <td>Total</td>
+                <td id="cat-total-productos">0</td>
+                <td id="cat-total-stock">0</td>
+                <td id="cat-total-valor">0</td>
+                <td id="cat-estado-general">✔ Buen Nivel</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <section class="panel-reporte-sec" style="margin-top: 20px;">
+          <div class="sec-titulo" style="text-align: center;">🏷️ LEYENDA DE ESTADOS Y FÓRMULAS UTILIZADAS</div>
+          <table class="tabla-inventario">
+            <thead>
+              <tr>
+                <th style="width: 25%;">Estado / Indicador</th>
+                <th style="width: 55%;">Condición / Lógica del Sistema</th>
+                <th style="width: 20%; text-align: center;">Total Productos</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span style="background: #27ae60; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;">✅ BUEN NIVEL</span></td>
+                <td>Stock Actual > Stock Mínimo</td>
+                <td id="leyenda-buen-nivel" style="text-align: center; font-weight: bold;">0 productos</td>
+              </tr>
+              <tr>
+                <td><span style="background: #d35400; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;">⚠️ BAJO NIVEL</span></td>
+                <td>Stock Actual ≤ Stock Mínimo</td>
+                <td id="leyenda-bajo-nivel" style="text-align: center; font-weight: bold;">0 productos</td>
+              </tr>
+              <tr>
+                <td><span style="background: #c0392b; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;">🚫 AGOTADO</span></td>
+                <td>Stock Actual = 0</td>
+                <td id="leyenda-agotados" style="text-align: center; font-weight: bold;">0 productos</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+      </div>
+
+    </main>
+  </div>
+
+</body>
+</html>
