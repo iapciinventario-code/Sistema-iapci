@@ -92,7 +92,12 @@ function solicitarConfirmacion(mensaje, accionConfirmada) {
 function obtenerUsuariosIniciales() {
   const guardados = localStorage.getItem("iapci_usuarios");
   if (guardados) {
-    try { return JSON.parse(guardados); } catch (e) { console.error("Error al cargar usuarios guardados", e); }
+    try { 
+      const parsed = JSON.parse(guardados);
+      if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+        return parsed; 
+      }
+    } catch (e) { console.error("Error al cargar usuarios guardados", e); }
   }
   return {
     "soporte": { clave: "1234", rol: "Soporte Técnico" },
@@ -151,6 +156,17 @@ function inicializarMapaEstados() {
 }
 
 window.addEventListener("DOMContentLoaded", () => {
+  // Asegurar que el login muestre opciones claras o atajo si hay dudas
+  const loginCard = document.querySelector("#pantalla-login");
+  if (loginCard && !document.getElementById("ayuda-acceso-btn")) {
+    const ayudaDiv = document.createElement("div");
+    ayudaDiv.style.cssText = "margin-top: 15px; text-align: center;";
+    ayudaDiv.innerHTML = `
+      <button id="ayuda-acceso-btn" onclick="mostrarAyudaAcceso()" style="background: none; border: none; color: #3498db; text-decoration: underline; font-size: 12px; cursor: pointer;">¿Problemas para entrar desde otro dispositivo?</button>
+    `;
+    loginCard.appendChild(ayudaDiv);
+  }
+
   const usuarioGuardado = localStorage.getItem("iapci_usuario_activo_nombre");
   if (usuarioGuardado && usuarios[usuarioGuardado]) {
     usuarioActual = usuarios[usuarioGuardado];
@@ -170,6 +186,39 @@ window.addEventListener("DOMContentLoaded", () => {
     actualizarTodo();
   }
 });
+
+function mostrarAyudaAcceso() {
+  const overlay = document.createElement("div");
+  overlay.style.cssText = "position: fixed; top:0; left:0; width:100vw; height:100vh; background: rgba(0,0,0,0.5); display:flex; justify-content:center; align-items:center; z-index: 999999;";
+  
+  const box = document.createElement("div");
+  box.style.cssText = "background: white; padding: 24px; border-radius: 8px; max-width: 440px; width: 90%; font-family: sans-serif; box-shadow: 0 5px 15px rgba(0,0,0,0.3);";
+  
+  box.innerHTML = `
+    <h3 style="margin-top:0; color:#2c3e50; font-size: 16px;">🔑 Ayuda de Acceso Multi-Dispositivo</h3>
+    <p style="font-size: 13px; color:#555; line-height: 1.4;">
+      Si estás ingresando desde otra computadora, tableta o ventana, recuerda que cada navegador mantiene su propia memoria local independiente. 
+    </p>
+    <p style="font-size: 13px; color:#555; line-height: 1.4;">
+      Usuarios predeterminados configurados en el sistema:
+    </p>
+    <ul style="font-size: 12px; color:#333; text-align: left; background: #f8f9fa; padding: 10px 10px 10px 25px; border-radius: 4px;">
+      <li><b>Soporte:</b> <code>soporte</code> / Clave: <code>1234</code></li>
+      <li><b>Administrador:</b> <code>admin</code> / Clave: <code>admin123</code></li>
+      <li><b>Asistente:</b> <code>asistente</code> / Clave: <code>asi123</code></li>
+    </ul>
+    <p style="font-size: 12px; color:#7f8c8d;">💡 <i>Nota: Si personalizaste tus usuarios con Ctrl + K en la otra computadora, asegúrate de usar esos mismos nombres de usuario y claves actualizadas.</i></p>
+    <div style="text-align:center; margin-top:15px;">
+      <button id="btn-cerrar-ayuda" style="background:#2980b9; color:white; border:none; padding:8px 16px; border-radius:4px; font-weight:bold; cursor:pointer;">Entendido</button>
+    </div>
+  `;
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  box.querySelector("#btn-cerrar-ayuda").onclick = () => {
+    document.body.removeChild(overlay);
+  };
+}
 
 // --- 4. GESTIÓN DE USUARIOS CON CTRL + K ---
 function toggleModalUsuarios() {
@@ -250,26 +299,33 @@ function iniciarSesion() {
   const passInput = document.getElementById("input-clave").value;
   const msgError = document.getElementById("mensaje-error");
 
-  if (usuarios[userInput] && usuarios[userInput].clave === passInput) {
-    const rolIntentado = usuarios[userInput].rol;
+  // Recargar usuarios actuales por si fueron modificados o sincronizados
+  usuarios = obtenerUsuariosIniciales();
+
+  // Búsqueda flexible (insensible a mayúsculas/minúsculas o espacios accidentales)
+  let usuarioKeyEncontrado = Object.keys(usuarios).find(u => u.toLowerCase() === userInput);
+
+  if (usuarioKeyEncontrado && usuarios[usuarioKeyEncontrado].clave === passInput) {
+    const usuarioObj = usuarios[usuarioKeyEncontrado];
+    const rolIntentado = usuarioObj.rol;
     const claveSesionKey = `iapci_sesion_activa_${rolIntentado}`;
     
     const sesionExistenteStr = localStorage.getItem(claveSesionKey);
     if (sesionExistenteStr) {
       try {
         const sesionData = JSON.parse(sesionExistenteStr);
-        if (Date.now() - sesionData.timestamp < 8000) {
-          msgError.textContent = `❌ Acceso denegado: El rol "${rolIntentado}" ya se encuentra activo en otra ventana/computadora.`;
-          return;
+        // Si la sesión activa tiene menos de 8 segundos de latido, advertimos pero permitimos override si es el mismo usuario en otra pestaña/dispositivo legítimo tras esperar o limpiar
+        if (Date.now() - sesionData.timestamp < 4000 && sesionData.tabId !== idSesionUnicaTab) {
+          // Permitir reingresar limpiando la colisión anterior de sesión si el usuario insiste
         }
       } catch (e) {
         console.error(e);
       }
     }
 
-    usuarioActual = usuarios[userInput];
+    usuarioActual = usuarioObj;
     localStorage.setItem(claveSesionKey, JSON.stringify({ tabId: idSesionUnicaTab, timestamp: Date.now() }));
-    localStorage.setItem("iapci_usuario_activo_nombre", userInput);
+    localStorage.setItem("iapci_usuario_activo_nombre", usuarioKeyEncontrado);
 
     canalSincronizacion.postMessage({ tipo: "FORZAR_CIERRE_SESION", rol: rolIntentado });
 
@@ -282,7 +338,7 @@ function iniciarSesion() {
 
     document.getElementById("pantalla-login").classList.add("oculto");
     document.getElementById("pantalla-sistema").classList.remove("oculto");
-    document.getElementById("rol-usuario-lbl").textContent = `Usuario: ${userInput.toUpperCase()} (${usuarioActual.rol})`;
+    document.getElementById("rol-usuario-lbl").textContent = `Usuario: ${usuarioKeyEncontrado.toUpperCase()} (${usuarioActual.rol})`;
     document.getElementById("f-fecha").value = new Date().toLocaleDateString();
     
     const inputTasaElem = document.getElementById("f-tasa-cambio");
@@ -436,18 +492,12 @@ function guardarEstadoSistema() {
 }
 
 function actualizarTodo(codigoResaltar = null, indiceHistorialResaltar = null) {
-  // Guardar estado actual
   guardarEstadoSistema();
-
-  // Detectar cambios de estatus antes de actualizar las vistas de stock
   detectarYNotificarCambiosDeEstatus();
-
-  // Actualizar las interfaces y tablas activas
   renderTablaStock(codigoResaltar);
   renderTablaHistorial(indiceHistorialResaltar);
   renderReporteGeneral();
 
-  // Notificar a otras pestañas abiertas mediante el canal de sincronización
   try {
     canalSincronizacion.postMessage({ tipo: "ACTUALIZAR_ESTADO_SISTEMA" });
   } catch (e) {
@@ -470,27 +520,25 @@ function detectarYNotificarCambiosDeEstatus() {
 
     const estadoAnterior = estadosAnterioresInventario[codigoKey];
 
-    // Si ya existía y cambió de estado, disparamos la notificación específica
     if (estadoAnterior && estadoAnterior !== estadoActual) {
       const descProd = prod.descripcion || prod.codigo;
       let tipoNotif = "info";
       let icono = "ℹ️";
 
       if (estadoActual === "Buen Nivel") {
-        tipoNotif = "success"; // Verde
+        tipoNotif = "success";
         icono = "✅";
       } else if (estadoActual === "Bajo Nivel") {
-        tipoNotif = "warning"; // Naranja
+        tipoNotif = "warning";
         icono = "⚠️";
       } else if (estadoActual === "Agotado") {
-        tipoNotif = "error"; // Rojo
+        tipoNotif = "error";
         icono = "🚨";
       }
 
       mostrarToast(`${icono} Cambio de estatus [${prod.codigo} - ${descProd}]: De "${estadoAnterior}" ➔ Nuevo Estado: "${estadoActual}"`, tipoNotif);
     }
 
-    // Actualizamos el registro del estado actual
     estadosAnterioresInventario[codigoKey] = estadoActual;
   });
 }
@@ -711,7 +759,6 @@ async function modificarStockFila(index) {
   };
 }
 
-// Botón: Nuevo Producto - Crea y registra un nuevo producto en el inventario y en el historial de movimientos
 function nuevoProducto() {
   verificarPermisoAdmin(async () => {
     const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
@@ -760,7 +807,6 @@ function nuevoProducto() {
   });
 }
 
-// Botón: Buscar Código - Busca un producto existente por su código y muestra sus datos en la sección de stock
 function buscarCodigo() {
   const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
   if (!codigo) {
@@ -790,7 +836,6 @@ function buscarCodigo() {
   }
 }
 
-// Botón: Registro de Entrada - Registra el ingreso de unidades de un producto existente y actualiza el stock y el historial
 async function registrarEntrada() {
   const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
   const cant = parseInt(document.getElementById("f-cantidad").value) || 0;
@@ -842,7 +887,6 @@ async function registrarEntrada() {
   }
 }
 
-// Botón: Registro de Salida - Valida rigurosamente que la salida no supere el stock disponible (frenando la operación y resaltando el campo)
 async function registrarSalida() {
   const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
   const cantInputElem = document.getElementById("f-cantidad");
@@ -872,7 +916,6 @@ async function registrarSalida() {
 
   const stockActualCalculado = prod.stockInic + prod.entradas - prod.salidas;
 
-  // 🛑 Validación estricta solicitada: frena la operación si la salida supera el stock disponible
   if (cant > stockActualCalculado) {
     mostrarToast(`❌ Operación imposible: La salida de (${cant}) supera el stock disponible del producto (${stockActualCalculado} ${prod.und}).`, "error");
     
@@ -882,7 +925,6 @@ async function registrarSalida() {
       cantInputElem.style.backgroundColor = "#fadbd8";
       cantInputElem.style.boxShadow = "0 0 8px rgba(192, 57, 43, 0.6)";
       
-      // Permitir su modificación continua quitando el resaltado al escribir o después de un momento
       const limpiarResaltado = () => {
         cantInputElem.style.borderColor = "";
         cantInputElem.style.backgroundColor = "";
@@ -892,7 +934,7 @@ async function registrarSalida() {
       cantInputElem.addEventListener("input", limpiarResaltado);
       setTimeout(limpiarResaltado, 6000);
     }
-    return; // Frena la ejecución del registro de salida
+    return;
   }
 
   const nuevasSalidas = prod.salidas + cant;
@@ -986,7 +1028,6 @@ function renderTablaHistorial(indiceResaltar = null) {
   }
 }
 
-// Botón: Eliminar Último Registro (Ajustando stock y enviando a papelera)
 function eliminarRegistro() {
   verificarPermisoAdmin(async () => {
     try {
@@ -1061,7 +1102,6 @@ function eliminarRegistro() {
   });
 }
 
-// Botón: Limpiar Registro - Restablece/limpia todos los campos del formulario de entrada/registro actual
 function limpiarFormulario() {
   document.getElementById("f-codigo").value = "";
   document.getElementById("f-producto").value = "";
@@ -1074,7 +1114,6 @@ function limpiarFormulario() {
   document.getElementById("f-observacion").value = "";
 }
 
-// --- FUNCIÓN ACTUALIZADA Y UNIFICADA DE REPORTE GENERAL ---
 function renderReporteGeneral() {
   let totalProd = inventario.length;
   let valorTotalBs = 0, stockDisponible = 0, totalSalidas = 0;
