@@ -1,29 +1,17 @@
 // ==========================================
 // CEREBRO UNIFICADO DEL SISTEMA - IAPCI 2026
-// (Sincronización Cloud en Tiempo Real con Firebase Firestore)
+// (Sincronización Firestore en Tiempo Real + Respaldo Local + Sesión Única)
 // ==========================================
 
-// --- 0. CONFIGURACIÓN E INICIALIZACIÓN DE FIREBASE FIRESTORE ---
-// Asegúrese de cargar los scripts de Firebase SDK en su HTML principal si no están presentes.
-const firebaseConfig = {
-  apiKey: "AIzaSyDummyKeyForIapciCloud2026",
-  authDomain: "iapci-sistema-2026.firebaseapp.com",
-  projectId: "iapci-sistema-2026",
-  storageBucket: "iapci-sistema-2026.appspot.com",
-  messagingSenderId: "123456789012",
-  appId: "1:123456789012:web:abcdef123456"
-};
-
-let db = null;
-try {
-  if (typeof firebase !== "undefined" && !firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
-    db = firebase.firestore();
-  } else if (typeof firebase !== "undefined" && firebase.apps.length > 0) {
-    db = firebase.firestore();
-  }
-} catch (e) {
-  console.warn("Firebase no se pudo inicializar automáticamente. Asegure conexión a internet o scripts SDK.", e);
+// --- 0. FUNCIÓN DE IMPRESIÓN DE REPORTE GENERAL ---
+function imprimirReporte() {
+  // Asegura que se encuentre activa la pestaña de reporte general
+  cambiarPestana('reporte');
+  
+  // Da un pequeño respiro para que el DOM renderice la vista correctamente antes de invocar la impresión
+  setTimeout(() => {
+    window.print();
+  }, 200);
 }
 
 // --- 1. COMUNICACIÓN Y CONTROL DE SESIÓN ÚNICA ENTRE PESTAÑAS ---
@@ -53,7 +41,7 @@ canalSincronizacion.onmessage = function (event) {
   }
 };
 
-// --- UTILIDADES DE NOTIFICACIÓN Y DIÁLOGOS MOSTRADOS EN PANTALLA ---
+// --- UTILIDADES DE NOTIFICACIÓN Y DIÁLOGOS MOSTRADOS EN PANTALLA (Duración 5 segundos) ---
 function mostrarToast(mensaje, tipo = 'info') {
   let container = document.getElementById("iapci-toast-container");
   if (!container) {
@@ -77,7 +65,7 @@ function mostrarToast(mensaje, tipo = 'info') {
     toast.style.opacity = "0";
     toast.style.transform = "translateY(-10px)";
     setTimeout(() => toast.remove(), 300);
-  }, 5000);
+  }, 5000); // ⏱️ Ajustado a 5 segundos exactos
 }
 
 function solicitarConfirmacion(mensaje, accionConfirmada) {
@@ -100,25 +88,54 @@ function solicitarConfirmacion(mensaje, accionConfirmada) {
   box.querySelector("#btn-conf-no").onclick = () => { document.body.removeChild(overlay); };
 }
 
-function imprimirReporte() {
-  cambiarPestana('reporte');
-  setTimeout(() => {
-    window.print();
-  }, 200);
+// --- 2. ESTADO GLOBAL E INICIALIZACIÓN DE DATOS LOCALES ---
+function obtenerUsuariosIniciales() {
+  const guardados = localStorage.getItem("iapci_usuarios");
+  if (guardados) {
+    try { return JSON.parse(guardados); } catch (e) { console.error("Error al cargar usuarios guardados", e); }
+  }
+  return {
+    "soporte": { clave: "1234", rol: "Soporte Técnico" },
+    "admin": { clave: "admin123", rol: "Administrador" },
+    "asistente": { clave: "asi123", rol: "Asistente" }
+  };
 }
 
-// --- 2. ESTADO GLOBAL E INICIALIZACIÓN CON FIRESTORE EN TIEMPO REAL ---
-let usuarios = {
-  "soporte": { clave: "1234", rol: "Soporte Técnico" },
-  "admin": { clave: "admin123", rol: "Administrador" },
-  "asistente": { clave: "asi123", rol: "Asistente" }
-};
+function obtenerTasaInicial() {
+  const hoyStr = new Date().toLocaleDateString();
+  const tasaGuardada = localStorage.getItem("tasa_valor");
+  const fechaGuardada = localStorage.getItem("tasa_fecha");
+
+  if (tasaGuardada && fechaGuardada === hoyStr) {
+    return parseFloat(tasaGuardada);
+  }
+  return 36.50;
+}
+
+function obtenerInventarioInicial() {
+  const guardado = localStorage.getItem("iapci_inventario");
+  if (guardado) {
+    try { return JSON.parse(guardado); } catch (e) { console.error("Error al cargar inventario local", e); }
+  }
+  return [];
+}
+
+function obtenerHistorialInicial() {
+  const guardado = localStorage.getItem("iapci_historial");
+  if (guardado) {
+    try { return JSON.parse(guardado); } catch (e) { console.error("Error al cargar historial local", e); }
+  }
+  return [];
+}
+
+let usuarios = obtenerUsuariosIniciales();
 let usuarioActual = null;
-let tasaCambioBCV = 36.50;
-let inventario = [];
-let historialMovimientos = [];
-let papeleraMovimientos = [];
-const CAPACIDAD_MAXIMA_PAPELERA = 100;
+let tasaCambioBCV = obtenerTasaInicial();
+
+let inventario = obtenerInventarioInicial();
+let historialMovimientos = obtenerHistorialInicial();
+
+// --- MAPA DE ESTADOS ANTERIORES PARA DETECTAR CAMBIOS DE ESTATUS ---
 let estadosAnterioresInventario = {};
 
 function inicializarMapaEstados() {
@@ -133,82 +150,7 @@ function inicializarMapaEstados() {
   });
 }
 
-// Escuchar cambios en tiempo real desde Firestore para que TODOS los dispositivos vean exactamente lo mismo
-function iniciarEscuchasCloud() {
-  if (!db) return;
-
-  // 1. Sincronización de Stock en Tiempo Real
-  db.collection("iapci_stock").onSnapshot((snapshot) => {
-    let nuevoInventario = [];
-    snapshot.forEach(doc => {
-      let data = doc.data();
-      data.idDoc = doc.id;
-      nuevoInventario.push(data);
-    });
-    inventario = nuevoInventario;
-    inicializarMapaEstados();
-    renderTablaStock();
-    renderReporteGeneral();
-  }, (error) => {
-    console.error("Error al escuchar stock en tiempo real:", error);
-  });
-
-  // 2. Sincronización de Historial en Tiempo Real
-  db.collection("iapci_historial").orderBy("timestamp", "desc").onSnapshot((snapshot) => {
-    let nuevoHistorial = [];
-    snapshot.forEach(doc => {
-      let data = doc.data();
-      data.idDoc = doc.id;
-      nuevoHistorial.push(data);
-    });
-    historialMovimientos = nuevoHistorial;
-    renderTablaHistorial();
-  }, (error) => {
-    console.error("Error al escuchar historial en tiempo real:", error);
-  });
-
-  // 3. Sincronización de Tasa BCV en Tiempo Real
-  db.collection("iapci_tasa").doc("bcv").onSnapshot((doc) => {
-    if (doc.exists) {
-      let data = doc.data();
-      if (data.tasa) {
-        tasaCambioBCV = parseFloat(data.tasa);
-        const inputTasaElem = document.getElementById("f-tasa-cambio");
-        if (inputTasaElem) inputTasaElem.value = tasaCambioBCV;
-        const lblTasa = document.getElementById("lbl-tasa-actual");
-        if (lblTasa) lblTasa.textContent = `Bs. ${tasaCambioBCV.toFixed(2)} / $`;
-        renderTablaHistorial();
-        renderReporteGeneral();
-      }
-    }
-  });
-
-  // 4. Sincronización de Usuarios en Tiempo Real
-  db.collection("iapci_usuarios").onSnapshot((snapshot) => {
-    if (!snapshot.empty) {
-      let nuevosUsers = {};
-      snapshot.forEach(doc => {
-        nuevosUsers[doc.id] = doc.data();
-      });
-      usuarios = nuevosUsers;
-    }
-  });
-
-  // 5. Sincronización de Papelera en Tiempo Real
-  db.collection("iapci_papelera").orderBy("timestamp", "desc").onSnapshot((snapshot) => {
-    let nuevaPapelera = [];
-    snapshot.forEach(doc => {
-      let data = doc.data();
-      data.idDoc = doc.id;
-      nuevaPapelera.push(data);
-    });
-    papeleraMovimientos = nuevaPapelera;
-  });
-}
-
 window.addEventListener("DOMContentLoaded", () => {
-  iniciarEscuchasCloud();
-
   const usuarioGuardado = localStorage.getItem("iapci_usuario_activo_nombre");
   if (usuarioGuardado && usuarios[usuarioGuardado]) {
     usuarioActual = usuarios[usuarioGuardado];
@@ -229,7 +171,7 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-// --- 3. GESTIÓN DE USUARIOS Y ACCESO MULTI-DISPOSITIVO ---
+// --- 4. GESTIÓN DE USUARIOS CON CTRL + K ---
 function toggleModalUsuarios() {
   const modal = document.getElementById("modal-usuarios");
   if (modal) {
@@ -274,7 +216,7 @@ async function guardarNuevosUsuarios() {
   nuevosUsuarios[aUser] = { clave: aPass || usuarios[oldAdmin]?.clave || "admin123", rol: "Administrador" };
   nuevosUsuarios[asUser] = { clave: asPass || usuarios[oldAsistente]?.clave || "asi123", rol: "Asistente" };
 
-  if (db) {
+  if (typeof db !== "undefined" && db) {
     try {
       const batch = db.batch();
       for (const uKey in usuarios) {
@@ -290,7 +232,8 @@ async function guardarNuevosUsuarios() {
   }
 
   usuarios = nuevosUsuarios;
-  mostrarToast("✅ Credenciales de usuarios actualizadas y sincronizadas en la nube.", "success");
+  localStorage.setItem("iapci_usuarios", JSON.stringify(usuarios));
+  mostrarToast("✅ Credenciales de usuarios actualizadas exitosamente.", "success");
   toggleModalUsuarios();
 }
 
@@ -301,21 +244,32 @@ window.addEventListener("keydown", function(e) {
   }
 });
 
+// --- 5. AUTENTICACIÓN Y NAVEGACIÓN ---
 function iniciarSesion() {
   const userInput = document.getElementById("input-usuario").value.trim().toLowerCase();
   const passInput = document.getElementById("input-clave").value;
   const msgError = document.getElementById("mensaje-error");
 
-  let usuarioKeyEncontrado = Object.keys(usuarios).find(u => u.toLowerCase() === userInput);
-
-  if (usuarioKeyEncontrado && usuarios[usuarioKeyEncontrado].clave === passInput) {
-    const usuarioObj = usuarios[usuarioKeyEncontrado];
-    const rolIntentado = usuarioObj.rol;
+  if (usuarios[userInput] && usuarios[userInput].clave === passInput) {
+    const rolIntentado = usuarios[userInput].rol;
     const claveSesionKey = `iapci_sesion_activa_${rolIntentado}`;
+    
+    const sesionExistenteStr = localStorage.getItem(claveSesionKey);
+    if (sesionExistenteStr) {
+      try {
+        const sesionData = JSON.parse(sesionExistenteStr);
+        if (Date.now() - sesionData.timestamp < 8000) {
+          msgError.textContent = `❌ Acceso denegado: El rol "${rolIntentado}" ya se encuentra activo en otra ventana/computadora.`;
+          return;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
 
-    usuarioActual = usuarioObj;
+    usuarioActual = usuarios[userInput];
     localStorage.setItem(claveSesionKey, JSON.stringify({ tabId: idSesionUnicaTab, timestamp: Date.now() }));
-    localStorage.setItem("iapci_usuario_activo_nombre", usuarioKeyEncontrado);
+    localStorage.setItem("iapci_usuario_activo_nombre", userInput);
 
     canalSincronizacion.postMessage({ tipo: "FORZAR_CIERRE_SESION", rol: rolIntentado });
 
@@ -328,7 +282,7 @@ function iniciarSesion() {
 
     document.getElementById("pantalla-login").classList.add("oculto");
     document.getElementById("pantalla-sistema").classList.remove("oculto");
-    document.getElementById("rol-usuario-lbl").textContent = `Usuario: ${usuarioKeyEncontrado.toUpperCase()} (${usuarioActual.rol})`;
+    document.getElementById("rol-usuario-lbl").textContent = `Usuario: ${userInput.toUpperCase()} (${usuarioActual.rol})`;
     document.getElementById("f-fecha").value = new Date().toLocaleDateString();
     
     const inputTasaElem = document.getElementById("f-tasa-cambio");
@@ -439,7 +393,7 @@ function actualizarTasa() {
     tasaCambioBCV = inputTasa;
     const hoyStr = new Date().toLocaleDateString();
 
-    if (db) {
+    if (typeof db !== "undefined" && db) {
       await db.collection("iapci_tasa").doc("bcv").set({
         tasa: tasaCambioBCV,
         fecha: hoyStr
@@ -450,7 +404,7 @@ function actualizarTasa() {
     if (lblTasa) lblTasa.textContent = `Bs. ${tasaCambioBCV.toFixed(2)} / $`;
 
     actualizarTodo();
-    mostrarToast(`✅ Tasa del día actualizada en la nube a Bs. ${tasaCambioBCV.toFixed(2)} / $`, "success");
+    mostrarToast(`✅ Tasa del día actualizada exitosamente a Bs. ${tasaCambioBCV.toFixed(2)} / $`, "success");
   });
 }
 
@@ -474,25 +428,30 @@ function cerrarSesion() {
   document.getElementById("input-clave").value = "";
 }
 
-// --- 4. OPERACIONES DE INVENTARIO Y STOCK CLOUD ---
+// --- 6. OPERACIONES DE INVENTARIO Y STOCK ---
 function guardarEstadoSistema() {
-  // Respaldo local auxiliar para caché de velocidad
   localStorage.setItem("iapci_inventario", JSON.stringify(inventario));
   localStorage.setItem("iapci_historial", JSON.stringify(historialMovimientos));
   localStorage.setItem("iapci_papelera", JSON.stringify(papeleraMovimientos));
 }
 
 function actualizarTodo(codigoResaltar = null, indiceHistorialResaltar = null) {
+  // Guardar estado actual
   guardarEstadoSistema();
+
+  // Detectar cambios de estatus antes de actualizar las vistas de stock
   detectarYNotificarCambiosDeEstatus();
+
+  // Actualizar las interfaces y tablas activas
   renderTablaStock(codigoResaltar);
   renderTablaHistorial(indiceHistorialResaltar);
   renderReporteGeneral();
 
+  // Notificar a otras pestañas abiertas mediante el canal de sincronización
   try {
     canalSincronizacion.postMessage({ tipo: "ACTUALIZAR_ESTADO_SISTEMA" });
   } catch (e) {
-    console.error(e);
+    console.error("Error al sincronizar con el canal:", e);
   }
 }
 
@@ -503,22 +462,35 @@ function detectarYNotificarCambiosDeEstatus() {
     const stockMinVal = prod.stockMin !== undefined ? prod.stockMin : 12;
     
     let estadoActual = "Buen Nivel";
-    if (stockActual <= 0) estadoActual = "Agotado";
-    else if (stockActual <= stockMinVal) estadoActual = "Bajo Nivel";
+    if (stockActual <= 0) {
+      estadoActual = "Agotado";
+    } else if (stockActual <= stockMinVal) {
+      estadoActual = "Bajo Nivel";
+    }
 
     const estadoAnterior = estadosAnterioresInventario[codigoKey];
 
+    // Si ya existía y cambió de estado, disparamos la notificación específica
     if (estadoAnterior && estadoAnterior !== estadoActual) {
       const descProd = prod.descripcion || prod.codigo;
       let tipoNotif = "info";
       let icono = "ℹ️";
 
-      if (estadoActual === "Buen Nivel") { tipoNotif = "success"; icono = "✅"; }
-      else if (estadoActual === "Bajo Nivel") { tipoNotif = "warning"; icono = "⚠️"; }
-      else if (estadoActual === "Agotado") { tipoNotif = "error"; icono = "🚨"; }
+      if (estadoActual === "Buen Nivel") {
+        tipoNotif = "success"; // Verde
+        icono = "✅";
+      } else if (estadoActual === "Bajo Nivel") {
+        tipoNotif = "warning"; // Naranja
+        icono = "⚠️";
+      } else if (estadoActual === "Agotado") {
+        tipoNotif = "error"; // Rojo
+        icono = "🚨";
+      }
 
       mostrarToast(`${icono} Cambio de estatus [${prod.codigo} - ${descProd}]: De "${estadoAnterior}" ➔ Nuevo Estado: "${estadoActual}"`, tipoNotif);
     }
+
+    // Actualizamos el registro del estado actual
     estadosAnterioresInventario[codigoKey] = estadoActual;
   });
 }
@@ -534,9 +506,8 @@ function renderTablaStock(codigoResaltar = null) {
     const stockActual = prod.stockInic + prod.entradas - prod.salidas;
     const valorDisponibleBs = stockActual * prod.precioBs;
     
-    const stockMinVal = prod.stockMin !== undefined ? prod.stockMin : 12;
-    const estado = stockActual > stockMinVal ? "Buen Nivel" : (stockActual > 0 ? "Bajo Nivel" : "Agotado");
-    const claseBadge = stockActual > stockMinVal ? "badge-buen" : (stockActual > 0 ? "badge-bajo" : "badge-agotado");
+    const estado = stockActual > (prod.stockMin !== undefined ? prod.stockMin : 12) ? "Buen Nivel" : (stockActual > 0 ? "Bajo Nivel" : "Agotado");
+    const claseBadge = stockActual > (prod.stockMin !== undefined ? prod.stockMin : 12) ? "badge-buen" : (stockActual > 0 ? "badge-bajo" : "badge-agotado");
 
     totalInic += prod.stockInic;
     totalEntradas += prod.entradas;
@@ -565,7 +536,7 @@ function renderTablaStock(codigoResaltar = null) {
       <td>${prod.salidas}</td>
       <td><strong>${stockActual}</strong></td>
       <td>Bs.S ${valorDisponibleBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</td>
-      <td>${stockMinVal}</td>
+      <td>${prod.stockMin !== undefined ? prod.stockMin : 12}</td>
       <td><span class="${claseBadge}">${estado}</span></td>
       <td>${prod.obs || '-'}</td>
       <td><button onclick="modificarStockFila(${index})" style="background:#007bff; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">Editar</button></td>
@@ -580,7 +551,9 @@ function renderTablaStock(codigoResaltar = null) {
 
   if (codigoResaltar) {
     const filaEncontrada = document.getElementById(`fila-prod-${codigoResaltar}`);
-    if (filaEncontrada) filaEncontrada.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (filaEncontrada) {
+      filaEncontrada.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
   }
 }
 
@@ -604,7 +577,7 @@ async function modificarStockFila(index) {
   box.innerHTML = `
     <div style="border-bottom:2px solid #34495e; padding-bottom:10px; margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;">
       <div>
-        <h3 style="margin:0; color:#2c3e50; font-size: 16px;">✏️ Edición Completa en la Nube</h3>
+        <h3 style="margin:0; color:#2c3e50; font-size: 16px;">✏️ Edición Completa de Producto</h3>
         <span style="font-size:11px; background:#e8f4f8; color:#2980b9; padding:2px 6px; border-radius:4px; font-weight:bold; display:inline-block; margin-top:4px;">
           👤 Editor: ${nombreUsuarioActivo} (${usuarioActual.rol})
         </span>
@@ -613,10 +586,11 @@ async function modificarStockFila(index) {
     </div>
 
     <div style="background:#f8f9fa; padding:12px; border-radius:6px; border-left:4px solid #3498db; margin-bottom:15px;">
-      <h4 style="margin:0 0 10px 0; font-size:12px; color:#2c3e50; text-transform:uppercase;">📌 1. Información General</h4>
+      <h4 style="margin:0 0 10px 0; font-size:12px; color:#2c3e50; text-transform:uppercase;">📌 1. Información General del Producto</h4>
+      
       <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:10px;">
         <div>
-          <label style="font-size:11px; font-weight:bold; color:#555; display:block; margin-bottom:3px;">Código:</label>
+          <label style="font-size:11px; font-weight:bold; color:#555; display:block; margin-bottom:3px;">Código del Producto:</label>
           <input type="text" id="ed-cod" value="${prod.codigo}" style="width:100%; padding:6px; box-sizing:border-box; border:1px solid #ccc; border-radius:4px; font-size:12px;">
         </div>
         <div>
@@ -624,10 +598,12 @@ async function modificarStockFila(index) {
           <input type="text" id="ed-cat" value="${prod.categoria || ''}" style="width:100%; padding:6px; box-sizing:border-box; border:1px solid #ccc; border-radius:4px; font-size:12px;">
         </div>
       </div>
+
       <div style="margin-bottom:10px;">
-        <label style="font-size:11px; font-weight:bold; color:#555; display:block; margin-bottom:3px;">Descripción:</label>
+        <label style="font-size:11px; font-weight:bold; color:#555; display:block; margin-bottom:3px;">Descripción / Nombre del Producto:</label>
         <input type="text" id="ed-desc" value="${prod.descripcion || ''}" style="width:100%; padding:6px; box-sizing:border-box; border:1px solid #ccc; border-radius:4px; font-size:12px;">
       </div>
+
       <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
         <div>
           <label style="font-size:11px; font-weight:bold; color:#555; display:block; margin-bottom:3px;">Pasillo:</label>
@@ -641,30 +617,36 @@ async function modificarStockFila(index) {
     </div>
 
     <div style="background:#fef9e7; padding:12px; border-radius:6px; border-left:4px solid #f39c12; margin-bottom:15px;">
-      <h4 style="margin:0 0 10px 0; font-size:12px; color:#7d6608; text-transform:uppercase;">📊 2. Control de Stock y Precios</h4>
+      <h4 style="margin:0 0 10px 0; font-size:12px; color:#7d6608; text-transform:uppercase;">📊 2. Control de Inventario, Precios y Stock</h4>
+      
       <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:10px;">
         <div>
           <label style="font-size:11px; font-weight:bold; color:#555; display:block; margin-bottom:3px;">Precio en Bs.S:</label>
           <input type="number" id="ed-precio" value="${prod.precioBs}" step="0.01" style="width:100%; padding:6px; box-sizing:border-box; border:1px solid #ccc; border-radius:4px; font-size:12px;">
         </div>
         <div>
-          <label style="font-size:11px; font-weight:bold; color:#555; display:block; margin-bottom:3px;">Stock Mínimo:</label>
+          <label style="font-size:11px; font-weight:bold; color:#555; display:block; margin-bottom:3px;">Stock Mínimo (Alerta):</label>
           <input type="number" id="ed-stkmin" value="${prod.stockMin !== undefined ? prod.stockMin : 12}" style="width:100%; padding:6px; box-sizing:border-box; border:1px solid #ccc; border-radius:4px; font-size:12px;">
         </div>
       </div>
+
       <div style="margin-bottom:10px;">
-        <label style="font-size:11px; font-weight:bold; color:#555; display:block; margin-bottom:3px;">Stock Actual Total (Calculado):</label>
+        <label style="font-size:11px; font-weight:bold; color:#555; display:block; margin-bottom:3px;">Stock Actual Total (Calculado: Inic + Ent - Sal):</label>
         <input type="number" id="ed-stk" value="${stockActualCalculado}" style="width:100%; padding:6px; box-sizing:border-box; border:1px solid #ccc; border-radius:4px; font-size:12px; background:#fff3cd; font-weight:bold;">
+        <span style="font-size:10px; color:#666; display:block; margin-top:2px;">(Modificar este valor ajustará automáticamente el stock inicial base).</span>
       </div>
+
       <div>
-        <label style="font-size:11px; font-weight:bold; color:#555; display:block; margin-bottom:3px;">Observaciones:</label>
+        <label style="font-size:11px; font-weight:bold; color:#555; display:block; margin-bottom:3px;">Observaciones / Notas:</label>
         <input type="text" id="ed-obs" value="${prod.obs || ''}" style="width:100%; padding:6px; box-sizing:border-box; border:1px solid #ccc; border-radius:4px; font-size:12px;">
       </div>
     </div>
 
     <div style="display:flex; gap:10px; justify-content:flex-end; align-items:center; border-top:1px solid #eee; padding-top:12px;">
-      <button id="btn-save-ed" style="background:#27ae60; color:white; border:none; padding:8px 16px; border-radius:4px; font-weight:bold; cursor:pointer; font-size:12px;">💾 Guardar en la Nube</button>
-      <button id="btn-canc-ed" style="background:#95a5a6; color:white; border:none; padding:8px 16px; border-radius:4px; font-weight:bold; cursor:pointer; font-size:12px;">Cancelar</button>
+      <div style="display:flex; gap:10px;">
+        <button id="btn-save-ed" style="background:#27ae60; color:white; border:none; padding:8px 16px; border-radius:4px; font-weight:bold; cursor:pointer; font-size:12px;">💾 Guardar Cambios</button>
+        <button id="btn-canc-ed" style="background:#95a5a6; color:white; border:none; padding:8px 16px; border-radius:4px; font-weight:bold; cursor:pointer; font-size:12px;">Cancelar</button>
+      </div>
     </div>
   `;
 
@@ -678,13 +660,25 @@ async function modificarStockFila(index) {
     const nuevoPas = parseInt(box.querySelector("#ed-pas").value) || 0;
     const nuevaUnd = box.querySelector("#ed-und").value.trim() || prod.und;
     const nuevoPrecio = parseFloat(box.querySelector("#ed-precio").value) || prod.precioBs;
-    const nuevoStockMin = parseInt(box.querySelector("#ed-stkmin").value) || 12;
+    const nuevoStockMin = parseInt(box.querySelector("#ed-stkmin").value) || (prod.stockMin !== undefined ? prod.stockMin : 12);
     const nuevaObs = box.querySelector("#ed-obs").value.trim() || prod.obs;
+
     const stockDeseado = parseInt(box.querySelector("#ed-stk").value);
+
+    let cambios = [];
+    if (nuevoCodigo !== prod.codigo) cambios.push("Código");
+    if (nuevaDesc !== prod.descripcion) cambios.push("Descripción");
+    if (nuevaCat !== prod.categoria) cambios.push("Categoría");
+    if (nuevoPas !== prod.pasillo) cambios.push("Pasillo");
+    if (nuevaUnd !== prod.und) cambios.push("Unidad");
+    if (nuevoPrecio !== prod.precioBs) cambios.push("Precio Bs");
+    if (nuevoStockMin !== prod.stockMin) cambios.push("Stock Mínimo");
+    if (nuevaObs !== prod.obs) cambios.push("Observaciones");
 
     if (!isNaN(stockDeseado) && stockDeseado !== stockActualCalculado) {
       prod.stockInic = stockDeseado - prod.entradas + prod.salidas;
       if (prod.stockInic < 0) prod.stockInic = 0;
+      cambios.push(`Stock (${stockActualCalculado} ➔ ${stockDeseado})`);
     }
 
     prod.codigo = nuevoCodigo;
@@ -696,7 +690,9 @@ async function modificarStockFila(index) {
     prod.stockMin = nuevoStockMin;
     prod.obs = nuevaObs;
 
-    if (db && prod.idDoc) {
+    inventario[index] = prod;
+
+    if (typeof db !== "undefined" && db && prod.idDoc) {
       const docRef = db.collection("iapci_stock").doc(prod.idDoc);
       const prodCopia = { ...prod };
       delete prodCopia.idDoc;
@@ -705,13 +701,18 @@ async function modificarStockFila(index) {
 
     document.body.removeChild(overlay);
     actualizarTodo(prod.codigo);
-    mostrarToast(`✅ Producto "${prod.codigo}" actualizado en el servidor compartido.`, "success");
+
+    const detalleCambios = cambios.length > 0 ? ` (${cambios.join(", ")})` : "";
+    mostrarToast(`✅ Producto "${prod.codigo}" modificado por ${usuarioActual.rol}${detalleCambios}.`, "success");
   };
 
-  box.querySelector("#btn-canc-ed").onclick = () => { document.body.removeChild(overlay); };
+  box.querySelector("#btn-canc-ed").onclick = () => {
+    document.body.removeChild(overlay);
+  };
 }
 
-async function nuevoProducto() {
+// Botón: Nuevo Producto - Crea y registra un nuevo producto en el inventario y en el historial de movimientos
+function nuevoProducto() {
   verificarPermisoAdmin(async () => {
     const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
     const descripcion = document.getElementById("f-producto").value.trim().toUpperCase();
@@ -730,7 +731,7 @@ async function nuevoProducto() {
 
     const existe = inventario.some(p => p.codigo.toUpperCase() === codigo);
     if (existe) {
-      mostrarToast("❌ El código ya existe en el inventario global.", "warning");
+      mostrarToast("❌ El código de producto ya existe en el inventario. Utilice 'Registrar Entrada' para reabastecer.", "warning");
       return;
     }
 
@@ -742,20 +743,24 @@ async function nuevoProducto() {
       fecha: new Date().toLocaleDateString(), codigo, producto: descripcion, categoria, pasillo, und, precio: precioBs, entrada: cantInic, salida: 0, observacion: obs, timestamp: Date.now()
     };
 
-    if (db) {
+    if (typeof db !== "undefined" && db) {
       const docRefStock = await db.collection("iapci_stock").add(nuevoProdObj);
       nuevoProdObj.idDoc = docRefStock.id;
       const docRefHist = await db.collection("iapci_historial").add(nuevoHistObj);
       nuevoHistObj.idDoc = docRefHist.id;
     }
 
+    inventario.push(nuevoProdObj);
+    historialMovimientos.unshift(nuevoHistObj);
     actualizarTodo(null, 0);
-    mostrarToast(`✅ Producto "${descripcion}" guardado en el servidor para todos los dispositivos.`, "success");
+
+    mostrarToast(`✅ Producto "${descripcion}" guardado exitosamente.`, "success");
     limpiarFormulario();
     cambiarPestana('registro');
   });
 }
 
+// Botón: Buscar Código - Busca un producto existente por su código y muestra sus datos en la sección de stock
 function buscarCodigo() {
   const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
   if (!codigo) {
@@ -773,6 +778,7 @@ function buscarCodigo() {
     if (document.getElementById("f-stock-min")) {
       document.getElementById("f-stock-min").value = prod.stockMin !== undefined ? prod.stockMin : 12;
     }
+    
     document.getElementById("f-precio").value = "";
     document.getElementById("f-cantidad").value = "";
     document.getElementById("f-observacion").value = "";
@@ -784,6 +790,7 @@ function buscarCodigo() {
   }
 }
 
+// Botón: Registro de Entrada - Registra el ingreso de unidades de un producto existente y actualiza el stock y el historial
 async function registrarEntrada() {
   const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
   const cant = parseInt(document.getElementById("f-cantidad").value) || 0;
@@ -793,7 +800,9 @@ async function registrarEntrada() {
 
   if (prod && cant > 0) {
     let nuevoPrecioBs = prod.precioBs;
-    if (precioNuevo > 0) nuevoPrecioBs = (prod.precioBs + precioNuevo) / 2;
+    if (precioNuevo > 0) {
+      nuevoPrecioBs = (prod.precioBs + precioNuevo) / 2;
+    }
     const nuevasEntradas = prod.entradas + cant;
 
     const nuevoMovimiento = {
@@ -810,16 +819,22 @@ async function registrarEntrada() {
       timestamp: Date.now()
     };
 
-    if (db && prod.idDoc) {
+    if (typeof db !== "undefined" && db && prod.idDoc) {
       await db.collection("iapci_stock").doc(prod.idDoc).update({
         precioBs: nuevoPrecioBs,
         entradas: nuevasEntradas
       });
-      await db.collection("iapci_historial").add(nuevoMovimiento);
+
+      const docRefHist = await db.collection("iapci_historial").add(nuevoMovimiento);
+      nuevoMovimiento.idDoc = docRefHist.id;
     }
     
+    prod.entradas = nuevasEntradas;
+    prod.precioBs = nuevoPrecioBs;
+    historialMovimientos.unshift(nuevoMovimiento);
     actualizarTodo(null, 0);
-    mostrarToast(`📥 Entrada de ${cant} ${prod.und} registrada y sincronizada.`, "success");
+
+    mostrarToast(`📥 Entrada de ${cant} ${prod.und} registrada.`, "success");
     limpiarFormulario();
     cambiarPestana('registro');
   } else {
@@ -827,6 +842,7 @@ async function registrarEntrada() {
   }
 }
 
+// Botón: Registro de Salida - Valida rigurosamente que la salida no supere el stock disponible (frenando la operación y resaltando el campo)
 async function registrarSalida() {
   const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
   const cantInputElem = document.getElementById("f-cantidad");
@@ -842,14 +858,41 @@ async function registrarSalida() {
 
   if (cant <= 0) {
     mostrarToast("⚠️ Por favor introduzca una cantidad válida mayor a 0.", "warning");
+    if (cantInputElem) {
+      cantInputElem.focus();
+      cantInputElem.style.borderColor = "#c0392b";
+      cantInputElem.style.backgroundColor = "#fadbd8";
+      setTimeout(() => {
+        cantInputElem.style.borderColor = "";
+        cantInputElem.style.backgroundColor = "";
+      }, 4000);
+    }
     return;
   }
 
   const stockActualCalculado = prod.stockInic + prod.entradas - prod.salidas;
 
+  // 🛑 Validación estricta solicitada: frena la operación si la salida supera el stock disponible
   if (cant > stockActualCalculado) {
-    mostrarToast(`❌ Operación imposible: La salida de (${cant}) supera el stock disponible (${stockActualCalculado} ${prod.und}).`, "error");
-    return;
+    mostrarToast(`❌ Operación imposible: La salida de (${cant}) supera el stock disponible del producto (${stockActualCalculado} ${prod.und}).`, "error");
+    
+    if (cantInputElem) {
+      cantInputElem.focus();
+      cantInputElem.style.borderColor = "#c0392b";
+      cantInputElem.style.backgroundColor = "#fadbd8";
+      cantInputElem.style.boxShadow = "0 0 8px rgba(192, 57, 43, 0.6)";
+      
+      // Permitir su modificación continua quitando el resaltado al escribir o después de un momento
+      const limpiarResaltado = () => {
+        cantInputElem.style.borderColor = "";
+        cantInputElem.style.backgroundColor = "";
+        cantInputElem.style.boxShadow = "";
+        cantInputElem.removeEventListener("input", limpiarResaltado);
+      };
+      cantInputElem.addEventListener("input", limpiarResaltado);
+      setTimeout(limpiarResaltado, 6000);
+    }
+    return; // Frena la ejecución del registro de salida
   }
 
   const nuevasSalidas = prod.salidas + cant;
@@ -869,16 +912,22 @@ async function registrarSalida() {
     timestamp: Date.now()
   };
 
-  if (db && prod.idDoc) {
+  if (typeof db !== "undefined" && db && prod.idDoc) {
     await db.collection("iapci_stock").doc(prod.idDoc).update({
       salidas: nuevasSalidas,
       precioBs: nuevoPrecioBs
     });
-    await db.collection("iapci_historial").add(nuevoMovimiento);
+
+    const docRefHist = await db.collection("iapci_historial").add(nuevoMovimiento);
+    nuevoMovimiento.idDoc = docRefHist.id;
   }
   
+  prod.salidas = nuevasSalidas;
+  prod.precioBs = nuevoPrecioBs;
+  historialMovimientos.unshift(nuevoMovimiento);
   actualizarTodo(null, 0);
-  mostrarToast(`📤 Salida de ${cant} ${prod.und} registrada y sincronizada globalmente.`, "success");
+  
+  mostrarToast(`📤 Salida de ${cant} ${prod.und} registrada exitosamente.`, "success");
   limpiarFormulario();
   cambiarPestana('registro');
 }
@@ -895,8 +944,8 @@ function renderTablaHistorial(indiceResaltar = null) {
     const precioTotal = cantMov * mov.precio;
     const precioUsd = mov.precio / tasaCambioBCV;
     
-    sumaEntradas += mov.entrada || 0;
-    sumaSalidas += mov.salida || 0;
+    sumaEntradas += mov.entrada;
+    sumaSalidas += mov.salida;
     sumaMontoTotal += precioTotal;
 
     const tr = document.createElement("tr");
@@ -928,58 +977,91 @@ function renderTablaHistorial(indiceResaltar = null) {
   if (document.getElementById("tot-entradas")) document.getElementById("tot-entradas").textContent = sumaEntradas;
   if (document.getElementById("tot-salidas")) document.getElementById("tot-salidas").textContent = sumaSalidas;
   if (document.getElementById("tot-monto-total")) document.getElementById("tot-monto-total").textContent = `Bs.S ${sumaMontoTotal.toFixed(2)}`;
+
+  if (indiceResaltar !== null) {
+    const filaEncontrada = document.getElementById(`fila-historial-${indiceResaltar}`);
+    if (filaEncontrada) {
+      filaEncontrada.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
 }
 
+// Botón: Eliminar Último Registro (Ajustando stock y enviando a papelera)
 function eliminarRegistro() {
   verificarPermisoAdmin(async () => {
-    if (!historialMovimientos || historialMovimientos.length === 0) {
-      mostrarToast("No hay registros en el historial para eliminar.", "info");
-      return;
-    }
-
-    solicitarConfirmacion("¿Desea eliminar el último movimiento, ajustar su stock en el servidor y enviarlo a la papelera en la nube?", async () => {
-      try {
-        const movEliminado = historialMovimientos[0];
-        if (!movEliminado) return;
-
-        const idDocHistorial = movEliminado.idDoc;
-        const codigoMov = (movEliminado.codigo || "").toUpperCase();
-        const prod = inventario.find(p => (p.codigo || "").toUpperCase() === codigoMov);
-
-        if (prod) {
-          const cantEntrada = movEliminado.entrada || 0;
-          const cantSalida = movEliminado.salida || 0;
-
-          if (cantEntrada > 0) prod.entradas = Math.max(0, prod.entradas - cantEntrada);
-          if (cantSalida > 0) prod.salidas = Math.max(0, prod.salidas - cantSalida);
-
-          if (db && prod.idDoc) {
-            await db.collection("iapci_stock").doc(prod.idDoc).update({
-              entradas: prod.entradas,
-              salidas: prod.salidas
-            });
-          }
-        }
-
-        const movLimpio = { ...movEliminado, timestamp: Date.now() };
-        delete movLimpio.idDoc;
-
-        if (db) {
-          if (idDocHistorial) {
-            await db.collection("iapci_historial").doc(idDocHistorial).delete();
-          }
-          await db.collection("iapci_papelera").add(movLimpio);
-        }
-
-        actualizarTodo(prod ? prod.codigo : null);
-        mostrarToast("🗑 El registro ha sido eliminado y sincronizado en todos los dispositivos.", "success");
-      } catch (err) {
-        console.error("Error al eliminar registro:", err);
+    try {
+      if (!historialMovimientos || historialMovimientos.length === 0) {
+        mostrarToast("No hay registros en el historial para eliminar.", "info");
+        return;
       }
-    });
+
+      if (papeleraMovimientos.length >= CAPACIDAD_MAXIMA_PAPELERA) {
+        mostrarToast("⚠️ Advertencia: La papelera ha alcanzado su capacidad máxima de 100 registros. Vacíe la papelera para continuar.", "warning");
+        return;
+      }
+
+      solicitarConfirmacion("¿Desea eliminar el último movimiento registrado de la pestaña de entradas/salidas, ajustar su cantidad correspondiente en el estatus y stock, y enviar el registro a la papelera?", async () => {
+        try {
+          const movEliminado = historialMovimientos.shift();
+          if (!movEliminado) return;
+
+          const idDocHistorial = movEliminado.idDoc;
+          const codigoMov = (movEliminado.codigo || "").toUpperCase();
+          const prod = inventario.find(p => (p.codigo || "").toUpperCase() === codigoMov);
+
+          if (prod) {
+            const cantEntrada = movEliminado.entrada || 0;
+            const cantSalida = movEliminado.salida || 0;
+
+            if (cantEntrada > 0) {
+              prod.entradas = Math.max(0, prod.entradas - cantEntrada);
+            }
+            if (cantSalida > 0) {
+              prod.salidas = Math.max(0, prod.salidas - cantSalida);
+            }
+
+            if (typeof db !== "undefined" && db && prod.idDoc) {
+              await db.collection("iapci_stock").doc(prod.idDoc).update({
+                entradas: prod.entradas,
+                salidas: prod.salidas
+              });
+            }
+          }
+
+          const movLimpioParaPapelera = { 
+            ...movEliminado, 
+            timestamp: Date.now() 
+          };
+          delete movLimpioParaPapelera.idDoc;
+
+          papeleraMovimientos.unshift(movLimpioParaPapelera);
+
+          if (typeof db !== "undefined" && db) {
+            try {
+              if (idDocHistorial) {
+                await db.collection("iapci_historial").doc(idDocHistorial).delete();
+              }
+              const docRefPapelera = await db.collection("iapci_papelera").add(movLimpioParaPapelera);
+              movLimpioParaPapelera.idDoc = docRefPapelera.id;
+            } catch (eFire) {
+              console.error("Error al sincronizar papelera/historial en Firestore:", eFire);
+            }
+          }
+
+          actualizarTodo(prod ? prod.codigo : null);
+          mostrarToast("🗑 El último registro de entrada/salida ha sido eliminado de la pestaña de registro, su stock fue ajustado correctamente y se envió a la papelera.", "success");
+        } catch (err) {
+          console.error("Error al eliminar registro:", err);
+          mostrarToast("❌ Ocurrió un error al procesar la eliminación.", "error");
+        }
+      });
+    } catch (e) {
+      console.error("Error en permisos de eliminación:", e);
+    }
   });
 }
 
+// Botón: Limpiar Registro - Restablece/limpia todos los campos del formulario de entrada/registro actual
 function limpiarFormulario() {
   document.getElementById("f-codigo").value = "";
   document.getElementById("f-producto").value = "";
@@ -992,10 +1074,12 @@ function limpiarFormulario() {
   document.getElementById("f-observacion").value = "";
 }
 
+// --- FUNCIÓN ACTUALIZADA Y UNIFICADA DE REPORTE GENERAL ---
 function renderReporteGeneral() {
   let totalProd = inventario.length;
   let valorTotalBs = 0, stockDisponible = 0, totalSalidas = 0;
   let buenNivel = 0, bajoNivel = 0, agotados = 0;
+
   let categoriasMap = {};
 
   inventario.forEach(prod => {
@@ -1008,9 +1092,13 @@ function renderReporteGeneral() {
     stockDisponible += stockAct;
     totalSalidas += prod.salidas;
 
-    if (stockAct > minStockVal) buenNivel++;
-    else if (stockAct > 0) bajoNivel++;
-    else agotados++;
+    if (stockAct > minStockVal) {
+      buenNivel++;
+    } else if (stockAct > 0) {
+      bajoNivel++;
+    } else {
+      agotados++;
+    }
 
     if (!categoriasMap[catNombre]) {
       categoriasMap[catNombre] = { productos: 0, stockTotal: 0, valorStockBs: 0, tieneAgotado: false, tieneBajoNivel: false };
@@ -1019,8 +1107,11 @@ function renderReporteGeneral() {
     categoriasMap[catNombre].stockTotal += stockAct;
     categoriasMap[catNombre].valorStockBs += valBs;
 
-    if (stockAct <= 0) categoriasMap[catNombre].tieneAgotado = true;
-    else if (stockAct <= minStockVal) categoriasMap[catNombre].tieneBajoNivel = true;
+    if (stockAct <= 0) {
+      categoriasMap[catNombre].tieneAgotado = true;
+    } else if (stockAct <= minStockVal) {
+      categoriasMap[catNombre].tieneBajoNivel = true;
+    }
   });
 
   const actualizarTextoPorIds = (ids, valor) => {
@@ -1040,10 +1131,31 @@ function renderReporteGeneral() {
   actualizarTextoPorIds(["leyenda-bajo-nivel"], `${bajoNivel} productos`);
   actualizarTextoPorIds(["leyenda-agotados"], `${agotados} productos`);
 
-  ["card-valor-total", "rep-valor-total-bs", "rep-val-bs", "rep-valor-bs"].forEach(id => {
+  const idsValorBs = ["card-valor-total", "rep-valor-total-bs", "rep-val-bs", "rep-valor-bs"];
+  idsValorBs.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.textContent = `Bs.S ${valorTotalBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`;
   });
+
+  let contenedorReporteVista = document.getElementById("vista-reporte");
+  if (contenedorReporteVista) {
+    let btnImprimirExistente = document.getElementById("btn-imprimir-reporte-general");
+    if (!btnImprimirExistente) {
+      const headerVista = contenedorReporteVista.querySelector("h2, h3, .header-reporte, header, div");
+      const wrapperBtn = document.createElement("div");
+      wrapperBtn.style.cssText = "margin: 15px 0; text-align: right;";
+      wrapperBtn.innerHTML = `
+        <button id="btn-imprimir-reporte-general" onclick="imprimirReporte()" style="background: #27ae60; color: white; border: none; padding: 10px 18px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; box-shadow: 0 2px 6px rgba(0,0,0,0.15);">
+          🖨️ Imprimir Reporte en PDF
+        </button>
+      `;
+      if (headerVista && headerVista.parentNode) {
+        headerVista.parentNode.insertBefore(wrapperBtn, headerVista.nextSibling);
+      } else {
+        contenedorReporteVista.insertBefore(wrapperBtn, contenedorReporteVista.firstChild);
+      }
+    }
+  }
 
   const tbodyCat = document.getElementById("tabla-resumen-categoria");
   if (tbodyCat) {
@@ -1056,8 +1168,11 @@ function renderReporteGeneral() {
       sumaCatValor += datos.valorStockBs;
 
       let estadoGralTexto = "✔ Buen Nivel";
-      if (datos.tieneAgotado) estadoGralTexto = "🚫 Agotado";
-      else if (datos.tieneBajoNivel) estadoGralTexto = "⚠️ Bajo Nivel";
+      if (datos.tieneAgotado) {
+        estadoGralTexto = "🚫 Agotado";
+      } else if (datos.tieneBajoNivel) {
+        estadoGralTexto = "⚠️ Bajo Nivel";
+      }
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
@@ -1080,12 +1195,28 @@ function renderReporteGeneral() {
       <td>-</td>
     `;
     tbodyCat.appendChild(trTotal);
+
+    if (document.getElementById("cat-total-productos")) document.getElementById("cat-total-productos").textContent = sumaCatProd;
+    if (document.getElementById("cat-total-stock")) document.getElementById("cat-total-stock").textContent = sumaCatStock.toLocaleString('es-VE');
+    if (document.getElementById("cat-total-valor")) document.getElementById("cat-total-valor").textContent = `Bs.S ${sumaCatValor.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`;
   }
 }
 
 // ==========================================
-// GESTIÓN DE PAPELERA EN LA NUBE
+// APARTADO EXCLUSIVO: GESTIÓN DE PAPELERA
 // ==========================================
+const CAPACIDAD_MAXIMA_PAPELERA = 100;
+
+function obtenerPapeleraInicial() {
+  const guardado = localStorage.getItem("iapci_papelera");
+  if (guardado) {
+    try { return JSON.parse(guardado); } catch (e) { console.error("Error al cargar papelera local", e); }
+  }
+  return [];
+}
+
+let papeleraMovimientos = obtenerPapeleraInicial();
+
 function toggleModalPapelera() {
   const modal = document.getElementById("modal-papelera");
   if (modal) {
@@ -1123,7 +1254,7 @@ function renderTablaPapelera() {
 
   let html = `
     <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; padding-bottom: 8px;">
-      <span style="font-size: 13px; color: #333; font-weight: bold;">Total en papelera cloud: ${papeleraMovimientos.length} de ${CAPACIDAD_MAXIMA_PAPELERA}</span>
+      <span style="font-size: 13px; color: #333; font-weight: bold;">Total en papelera: ${papeleraMovimientos.length} de ${CAPACIDAD_MAXIMA_PAPELERA} registros máximos</span>
       <div style="display: flex; gap: 8px;">
         <button onclick="eliminarSeleccionadosPapelera()" style="background: #c0392b; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px;">🗑️ Eliminar Seleccionados</button>
         <button onclick="vaciarPapelera()" style="background: #e74c3c; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px;">⚠️ Vaciar Papelera</button>
@@ -1141,10 +1272,10 @@ function renderTablaPapelera() {
             <th style="padding: 6px;">Pasillo</th>
             <th style="padding: 6px;">UND.</th>
             <th style="padding: 6px;">Precio Bs.S</th>
-            <th style="padding: 6px;">Precio USD</th>
+            <th style="padding: 6px;">Precio USD ($)</th>
             <th style="padding: 6px;">Entrada</th>
             <th style="padding: 6px;">Salida</th>
-            <th style="padding: 6px;">Total Bs.S</th>
+            <th style="padding: 6px;">Precio Total Bs.S</th>
             <th style="padding: 6px;">Observaciones</th>
             <th style="padding: 6px; text-align: center;">Acción</th>
           </tr>
@@ -1153,7 +1284,7 @@ function renderTablaPapelera() {
   `;
 
   if (papeleraMovimientos.length === 0) {
-    html += `<tr><td colspan="14" style="text-align:center; padding: 25px; color: #666; background: #fff;">La papelera cloud está vacía.</td></tr>`;
+    html += `<tr><td colspan="14" style="text-align:center; padding: 25px; color: #666; background: #fff;">La papelera está vacía.</td></tr>`;
   } else {
     papeleraMovimientos.forEach((mov, index) => {
       const cantMov = mov.entrada > 0 ? mov.entrada : mov.salida;
@@ -1183,44 +1314,84 @@ function renderTablaPapelera() {
     });
   }
 
-  html += `</tbody></table></div>`;
+  html += `
+        </tbody>
+      </table>
+    </div>
+  `;
+
   contenedor.innerHTML = html;
 }
 
 function seleccionarTodosPapelera(source) {
-  document.querySelectorAll('.chk-item-papelera').forEach(chk => chk.checked = source.checked);
+  const checkboxes = document.querySelectorAll('.chk-item-papelera');
+  checkboxes.forEach(chk => chk.checked = source.checked);
 }
 
-async function restaurarRegistroPapelera(index) {
+function restaurarRegistroPapelera(index) {
   verificarPermisoAdmin(async () => {
     if (index >= 0 && index < papeleraMovimientos.length) {
       const movRestaurar = papeleraMovimientos[index];
       const idDocPapelera = movRestaurar.idDoc;
+      
+      papeleraMovimientos.splice(index, 1);
+      
+      delete movRestaurar.idDoc;
+
       const codigoRestaurar = (movRestaurar.codigo || "").toUpperCase();
 
-      if (db) {
-        if (idDocPapelera) await db.collection("iapci_papelera").doc(idDocPapelera).delete();
-        delete movRestaurar.idDoc;
-        await db.collection("iapci_historial").add({ ...movRestaurar, timestamp: Date.now() });
+      historialMovimientos.unshift({ ...movRestaurar, timestamp: Date.now() });
 
-        let prod = inventario.find(p => (p.codigo || "").toUpperCase() === codigoRestaurar);
-        if (prod) {
-          if (movRestaurar.entrada > 0) prod.entradas += movRestaurar.entrada;
-          if (movRestaurar.salida > 0) prod.salidas += movRestaurar.salida;
-          if (movRestaurar.precio > 0) prod.precioBs = movRestaurar.precio;
+      let prod = inventario.find(p => (p.codigo || "").toUpperCase() === codigoRestaurar);
+      
+      if (prod) {
+        if (movRestaurar.entrada > 0) {
+          prod.entradas += movRestaurar.entrada;
+        }
+        if (movRestaurar.salida > 0) {
+          prod.salidas += movRestaurar.salida;
+        }
+        if (movRestaurar.precio > 0) prod.precioBs = movRestaurar.precio;
 
-          if (prod.idDoc) {
-            await db.collection("iapci_stock").doc(prod.idDoc).update({
-              entradas: prod.entradas,
-              salidas: prod.salidas,
-              precioBs: prod.precioBs
-            });
-          }
+        if (typeof db !== "undefined" && db && prod.idDoc) {
+          await db.collection("iapci_stock").doc(prod.idDoc).update({
+            entradas: prod.entradas,
+            salidas: prod.salidas,
+            precioBs: prod.precioBs
+          });
+        }
+      } else {
+        const nuevoProd = {
+          codigo: movRestaurar.codigo,
+          descripcion: movRestaurar.producto,
+          categoria: movRestaurar.categoria || "General",
+          pasillo: movRestaurar.pasillo || 0,
+          und: movRestaurar.und || "UND",
+          precioBs: movRestaurar.precio || 0,
+          stockInic: movRestaurar.entrada > 0 ? movRestaurar.entrada : 0,
+          entradas: 0,
+          salidas: movRestaurar.salida > 0 ? movRestaurar.salida : 0,
+          stockMin: 12,
+          obs: movRestaurar.observacion || "RESTAURADO DESDE PAPELERA"
+        };
+        
+        inventario.push(nuevoProd);
+
+        if (typeof db !== "undefined" && db) {
+          const docRefStock = await db.collection("iapci_stock").add(nuevoProd);
+          nuevoProd.idDoc = docRefStock.id;
         }
       }
 
+      if (typeof db !== "undefined" && db) {
+        if (idDocPapelera) {
+          await db.collection("iapci_papelera").doc(idDocPapelera).delete();
+        }
+        await db.collection("iapci_historial").add({ ...movRestaurar, timestamp: Date.now() });
+      }
+
       actualizarTodo(codigoRestaurar);
-      mostrarToast("✅ Registro restaurado de la papelera en la nube exitosamente.", "success");
+      mostrarToast("✅ Registro restaurado de la papelera exitosamente y reajustado en el estatus y stock.", "success");
       renderTablaPapelera();
     }
   });
@@ -1241,10 +1412,14 @@ function eliminarSeleccionadosPapelera() {
       for (const index of seleccionados) {
         if (index >= 0 && index < papeleraMovimientos.length) {
           const item = papeleraMovimientos[index];
-          if (db && item.idDoc) await db.collection("iapci_papelera").doc(item.idDoc).delete();
+          if (typeof db !== "undefined" && db && item.idDoc) {
+            await db.collection("iapci_papelera").doc(item.idDoc).delete();
+          }
+          papeleraMovimientos.splice(index, 1);
         }
       }
-      mostrarToast(`✅ Elementos eliminados permanentemente de la nube.`, "info");
+      guardarEstadoSistema();
+      mostrarToast(`✅ ${seleccionados.length} elementos eliminados permanentemente.`, "info");
       renderTablaPapelera();
     });
   });
@@ -1257,15 +1432,22 @@ function vaciarPapelera() {
       return;
     }
 
-    solicitarConfirmacion("⚠️ ¿Desea vaciar permanentemente toda la papelera en la nube?", async () => {
-      if (db) {
-        const snapshot = await db.collection("iapci_papelera").get();
-        const batch = db.batch();
-        snapshot.forEach(doc => batch.delete(doc.ref));
-        await batch.commit();
+    solicitarConfirmacion("⚠️ ¿Está seguro de que desea vaciar permanentemente toda la papelera? Esta acción no se puede deshacer.", async () => {
+      try {
+        if (typeof db !== "undefined" && db) {
+          const snapshot = await db.collection("iapci_papelera").get();
+          const batch = db.batch();
+          snapshot.forEach(doc => batch.delete(doc.ref));
+          await batch.commit();
+        }
+      } catch (error) {
+        console.error("Error al vaciar papelera en Firestore:", error);
       }
+
+      papeleraMovimientos = [];
+      guardarEstadoSistema();
       renderTablaPapelera();
-      mostrarToast("✅ Papelera cloud vaciada con éxito.", "success");
+      mostrarToast("✅ Papelera vaciada con éxito.", "success");
     });
   });
 }
