@@ -68,25 +68,6 @@
     // Compartir la referencia en window para que app.js la use
     window.db = db;
     console.log("🔥 Firebase Firestore conectado con éxito");
-
-    /* 
-    // ==========================================
-    // SCRIPT DE INICIALIZACIÓN DE DATOS BASE (OPCIONAL)
-    // Descomenta esta función si deseas sembrar los datos por primera vez
-    // ==========================================
-    async function inicializarDatosBase() {
-      try {
-        await db.collection("iapci_tasa").doc("bcv").set({ tasa: 36.50, fecha: "29/08/2026" });
-        await db.collection("iapci_usuarios").doc("soporte").set({ clave: "soporte123", rol: "Soporte Técnico" });
-        await db.collection("iapci_usuarios").doc("admin").set({ clave: "admin123", rol: "Administrador" });
-        await db.collection("iapci_usuarios").doc("asistente").set({ clave: "asistente123", rol: "Asistente" });
-        console.log("✅ Datos base sembrados con éxito.");
-      } catch (e) {
-        console.error("❌ Error al inicializar datos base: ", e);
-      }
-    }
-    // inicializarDatosBase();
-    */
   </script>
 
   <!-- Script principal del sistema -->
@@ -124,6 +105,9 @@
   </div>
 
   <!-- MODAL PARA PAPELERA DE RECICLAJE Y RESTAURACIÓN -->
+
+
+  
   <div id="modal-papelera" class="oculto" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 9999;">
     <div style="background: white; padding: 25px; border-radius: 8px; width: 950px; max-width: 95%; box-shadow: 0 4px 15px rgba(0,0,0,0.3); font-family: sans-serif;">
       
@@ -133,8 +117,6 @@
           <p style="font-size: 11px; color: #666; margin: 3px 0 0 0;">Gestión de elementos eliminados, restauración y borrado definitivo.</p>
         </div>
         <div style="display: flex; gap: 8px;">
-          <button onclick="eliminarSeleccionadosPapelera()" style="background:#ffc107; color:#333; border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-weight:bold; font-size: 12px;" title="Eliminar registros seleccionados">Eliminar</button>
-          <button onclick="vaciarPapeleraSegura()" style="background:#dc3545; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-weight:bold; font-size: 12px;" title="Vaciar toda la papelera">Vaciar Papelera</button>
           <button onclick="toggleModalPapelera()" style="background: #7f8c8d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px;">Cerrar</button>
         </div>
       </div>
@@ -206,7 +188,7 @@
               <div class="form-group"><label>Producto:</label><input type="text" id="f-producto"></div>
               <div class="form-group"><label>Categoría:</label><input type="text" id="f-categoria"></div>
               <div class="form-group"><label>Pasillo:</label><input type="number" id="f-pasillo"></div>
-              <div class="form-group"><label>Stock Mínimo:</label><input type="number" id="f-stock-min" value="5" placeholder="Ej: 5"></div>
+              <div class="form-group"><label>Stock Mínimo:</label><input type="number" id="f-stock-min" value="12" placeholder="Ej: 12"></div>
             </div>
 
             <div class="bloque-datos">
@@ -309,24 +291,26 @@
 
       <!-- PESTAÑA 4: REPORTE GENERAL -->
       <div id="vista-reporte" class="oculto">
-        <div class="subtitulo-reporte">Reporte General</div>
+        <div class="subtitulo-reporte" style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Reporte General</span>
+        </div>
 
         <div class="cards-grid-top">
           <div class="card-reporte card-blue">
             <div class="card-header-icon">📊 TOTAL PRODUCTOS</div>
-            <div id="card-total-productos" class="card-valor">0</div>
+            <div id="rep-total-productos" class="card-valor">0</div>
             <div class="card-subtexto">Productos registrados en inventario</div>
           </div>
 
           <div class="card-reporte card-blue">
             <div class="card-header-icon">💰 VALOR TOTAL EN STOCK</div>
-            <div id="card-valor-total" class="card-valor">Bs.S 0,00</div>
+            <div id="rep-valor-total-bs" class="card-valor">Bs.S 0,00</div>
             <div class="card-subtexto">Bs.S = stock actual * precio unitario</div>
           </div>
 
           <div class="card-reporte card-brown">
             <div class="card-header-icon">📦 STOCK DISPONIBLE</div>
-            <div id="card-stock-disponible" class="card-valor">0</div>
+            <div id="rep-stock-disponible" class="card-valor">0</div>
             <div class="card-subtexto">Total de unidades disponibles en inventario</div>
           </div>
 
@@ -340,19 +324,19 @@
         <div class="cards-grid-status">
           <div class="card-status status-green">
               <div class="status-titulo">✅ BUEN NIVEL</div>
-              <div id="card-buen-nivel" style="font-size: 28px; font-weight: bold; margin: 5px 0;">0</div>
+              <div id="rep-buen-nivel" style="font-size: 28px; font-weight: bold; margin: 5px 0;">0</div>
               <div class="status-sub">Productos con stock sobre el mínimo</div>
           </div>
           
           <div class="card-status status-amber">
               <div class="status-titulo">⚠️ BAJO NIVEL</div>
-              <div id="card-bajo-nivel" style="font-size: 28px; font-weight: bold; margin: 5px 0;">0</div>
+              <div id="rep-bajo-nivel" style="font-size: 28px; font-weight: bold; margin: 5px 0;">0</div>
               <div class="status-sub">Productos con stock ≤ stock mínimo</div>
           </div>
           
           <div class="card-status status-red">
               <div class="status-titulo">🚫 AGOTADOS</div>
-              <div id="card-agotados" style="font-size: 28px; font-weight: bold; margin: 5px 0;">0</div>
+              <div id="rep-agotados" style="font-size: 28px; font-weight: bold; margin: 5px 0;">0</div>
               <div class="status-sub">Productos con stock = 0 urgente</div>
           </div>
         </div>
