@@ -92,7 +92,97 @@ function solicitarConfirmacion(mensaje, accionConfirmada) {
 
 async function cargarDatosDesdeFirebase() {
   if (typeof db === "undefined" || !db) {
-    mostrarToast("⚠️ Base de datos Firestore no detectada. Verifique la conexión.", "error");
+    try {
+      // Configuracion exacta proporcionada por el usuario
+      const firebaseConfig = {
+        apiKey: "AIzaSyDYOOtrqzSTS8vmWpBL7-YHldXVU6tudk0",
+        authDomain: "sistema-iapci.firebaseapp.com",
+        databaseURL: "https://sistema-iapci-default-rtdb.firebaseio.com",
+        projectId: "sistema-iapci",
+        storageBucket: "sistema-iapci.firebasestorage.app",
+        messagingSenderId: "84463581447",
+        appId: "1:84463581447:web:0a1146829d38ba06fe2da2",
+        measurementId: "G-L4638HK45V"
+      };
+
+      let firebaseApp;
+      if (typeof firebase !== "undefined") {
+        if (!firebase.apps.length) {
+          firebaseApp = firebase.initializeApp(firebaseConfig);
+        } else {
+          firebaseApp = firebase.app();
+        }
+        window.db = firebase.firestore();
+        db = window.db;
+        console.log("✅ Firestore inicializado mediante SDK global.");
+      } else if (typeof initializeApp !== "undefined") {
+        // Compatibilidad modular o CDN v11
+        // Si se cargan los módulos por CDN, se pueden usar aqui
+      }
+    } else {
+        console.log("✅ Firestore ya estaba disponible en el entorno global.");
+    }
+  }
+
+  if (typeof db === "undefined" || !db && typeof firebase !== "undefined" && firebase.firestore) {
+    window.db = firebase.firestore();
+    db = window.db;
+  }
+
+  if (typeof db === "undefined" || !db) {
+    // Si aun no carga por CDN, intentamos inyectar los scripts de Firebase Firestore si faltan
+    if (!document.getElementById("firebase-sdk-script")) {
+      const scriptApp = document.createElement("script");
+      scriptApp.src = "https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js";
+      scriptApp.onload = () => {
+        const scriptFs = document.createElement("script");
+        scriptFs.src = "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js";
+        scriptFs.onload = () => {
+          const firebaseConfig = {
+            apiKey: "AIzaSyDYOOtrqzSTS8vmWpBL7-YHldXVU6tudk0",
+            authDomain: "sistema-iapci.firebaseapp.com",
+            databaseURL: "https://sistema-iapci-default-rtdb.firebaseio.com",
+            projectId: "sistema-iapci",
+            storageBucket: "sistema-iapci.firebasestorage.app",
+            messagingSenderId: "84463581447",
+            appId: "1:84463581447:web:0a1146829d38ba06fe2da2",
+            measurementId: "G-L4638HK45V"
+          };
+          if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+          }
+          window.db = firebase.firestore();
+          db = window.db;
+          mostrarToast("✅ Conectado a Firestore con éxito.", "success");
+          cargarDatosDesdeFirebase();
+        };
+        document.head.appendChild(scriptFs);
+      };
+      scriptApp.id = "firebase-sdk-script";
+      document.head.appendChild(scriptApp);
+      return;
+    }
+
+    mostrarToast("⚠️ Base de datos Firestore no detectada. Verifique la conexión o el entorno.", "error");
+    
+    // Permitir acceso local temporal en memoria si Firestore no está disponible para evitar bloqueo total
+    const usuarioGuardado = sessionStorage.getItem("iapci_usuario_activo_nombre");
+    if (usuarioGuardado && usuarios[usuarioGuardado]) {
+      usuarioActual = usuarios[usuarioGuardado];
+      document.getElementById("pantalla-login")?.classList.add("oculto");
+      document.getElementById("pantalla-sistema")?.classList.remove("oculto");
+      document.getElementById("rol-usuario-lbl").textContent = `Usuario: ${usuarioGuardado.toUpperCase()} (${usuarioActual.rol}) [Modo Local]`;
+      document.getElementById("f-fecha").value = new Date().toLocaleDateString();
+      
+      const inputTasaElem = document.getElementById("f-tasa-cambio");
+      if (inputTasaElem) inputTasaElem.value = tasaCambioBCV;
+
+      const lblTasa = document.getElementById("lbl-tasa-actual");
+      if (lblTasa) lblTasa.textContent = `Bs. ${tasaCambioBCV.toFixed(2)} / $`;
+
+      aplicarPermisos();
+      actualizarTodo();
+    }
     return;
   }
 
