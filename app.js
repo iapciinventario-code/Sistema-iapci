@@ -3,6 +3,52 @@
 // (Sincronización Firestore en Tiempo Real + Respaldo Local + Sesión Única)
 // ==========================================
 
+// --- 0. CONFIGURACIÓN E INICIALIZACIÓN DE FIREBASE ---
+const firebaseConfig = {
+  apiKey: "TU_API_KEY_REAL_DE_FIREBASE",
+  authDomain: "tu-proyecto.firebaseapp.com",
+  projectId: "tu-proyecto-id",
+  storageBucket: "tu-proyecto.appspot.com",
+  messagingSenderId: "tu_sender_id",
+  appId: "tu_app_id"
+};
+
+// Inicializar Firebase y Firestore (con respaldo de seguridad si no se carga el SDK)
+if (typeof firebase !== 'undefined') {
+  firebase.initializeApp(firebaseConfig);
+  var db = firebase.firestore();
+} else {
+  console.warn("⚠️ Firebase SDK no detectado. El sistema funcionará en modo local.");
+  var db = null;
+}
+
+async function cargarDatosRemotos() {
+  if (typeof db !== "undefined" && db) {
+    try {
+      // Cargar inventario desde Firestore
+      const snapshotStock = await db.collection("iapci_stock").get();
+      inventario = [];
+      snapshotStock.forEach(doc => {
+        inventario.push({ idDoc: doc.id, ...doc.data() });
+      });
+
+      // Cargar historial desde Firestore
+      const snapshotHist = await db.collection("iapci_historial").orderBy("timestamp", "desc").get();
+      historialMovimientos = [];
+      snapshotHist.forEach(doc => {
+        historialMovimientos.push({ idDoc: doc.id, ...doc.data() });
+      });
+
+      inicializarMapaEstados();
+      actualizarTodo();
+    } catch (e) {
+      console.error("Error al conectar con Firestore:", e);
+    }
+  }
+}
+
+// Llamar a esta función en el DOMContentLoaded o tras iniciar sesión[cite: 5]
+
 // --- 0. FUNCIÓN DE IMPRESIÓN DE REPORTE GENERAL ---
 function imprimirReporte() {
   // Asegura que se encuentre activa la pestaña de reporte general
