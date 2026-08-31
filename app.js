@@ -219,7 +219,7 @@ function inicializarMapaEstados() {
   estadosAnterioresInventario = {};
   inventario.forEach(prod => {
     const stockActual = prod.stockInic + prod.entradas - prod.salidas;
-    const stockMinVal = prod.stockMin !== undefined ? prod.stockMin : 12;
+    const stockMinVal = prod.stockMin !== undefined ? prod.stockMin : 100;
     let estado = "Buen Nivel";
     if (stockActual <= 0) estado = "Agotado";
     else if (stockActual <= stockMinVal) estado = "Bajo Nivel";
@@ -833,7 +833,7 @@ function nuevoProducto() {
     const und = document.getElementById("f-und").value.trim() || "UND";
     const precioBs = parseFloat(document.getElementById("f-precio").value) || 0;
     const cantInic = parseInt(document.getElementById("f-cantidad").value) || 0;
-    const stockMinInput = parseInt(document.getElementById("f-stock-min")?.value) || 12;
+    const stockMinInput = parseInt(document.getElementById("f-stock-min")?.value) || 100;
     const obs = document.getElementById("f-observacion").value.trim() || `Nuevo producto ${new Date().toLocaleDateString()}`;
 
     if (!codigo || !descripcion) {
@@ -1182,7 +1182,7 @@ function limpiarFormulario() {
   document.getElementById("f-und").value = "";
   document.getElementById("f-precio").value = "";
   document.getElementById("f-cantidad").value = "";
-  document.getElementById("f-stock-min").value = "12";
+  document.getElementById("f-stock-min").value = "100";
   document.getElementById("f-observacion").value = "";
 }
 
