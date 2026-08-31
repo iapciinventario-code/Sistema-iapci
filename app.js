@@ -1,5 +1,8 @@
-// --- CONFIGURACIÓN DE FIREBASE ---
-// Import the functions you need from the SDKs you need
+// ==========================================
+// CEREBRO UNIFICADO DEL SISTEMA - IAPCI 2026
+// (Sincronización Firestore Modular + Respaldo Local + Sesión Única)
+// ==========================================
+
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { 
@@ -13,14 +16,10 @@ import {
   updateDoc, 
   deleteDoc, 
   writeBatch 
-} from "firebase/firestore"; // 👈 Importa las funciones faltantes
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+} from "firebase/firestore";
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-    apiKey: "AIzaSyDYOOtrqzSTS8vmWpBL7-YHldXVU6tudk0",
+  apiKey: "AIzaSyDYOOtrqzSTS8vmWpBL7-YHldXVU6tudk0",
   authDomain: "sistema-iapci.firebaseapp.com",
   databaseURL: "https://sistema-iapci-default-rtdb.firebaseio.com",
   projectId: "sistema-iapci",
@@ -30,20 +29,12 @@ const firebaseConfig = {
   measurementId: "G-L4638HK45V"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app); // 👈 Inicializa la base de datos globalmente
-// ==========================================
-// CEREBRO UNIFICADO DEL SISTEMA - IAPCI 2026[cite: 11]
-// (Sincronización Firestore en Tiempo Real + Respaldo Local + Sesión Única)[cite: 11]
-// ==========================================
+const db = getFirestore(app);
 
 // --- 0. FUNCIÓN DE IMPRESIÓN DE REPORTE GENERAL ---
 function imprimirReporte() {
-  // Asegura que se encuentre activa la pestaña de reporte general
   cambiarPestana('reporte');
-  
-  // Da un pequeño respiro para que el DOM renderice la vista correctamente antes de invocar la impresión
   setTimeout(() => {
     window.print();
   }, 200);
@@ -76,7 +67,7 @@ canalSincronizacion.onmessage = function (event) {
   }
 };
 
-// --- UTILIDADES DE NOTIFICACIÓN Y DIÁLOGOS MOSTRADOS EN PANTALLA (Duración 5 segundos) ---
+// --- UTILIDADES DE NOTIFICACIÓN Y DIÁLOGOS MOSTRADOS EN PANTALLA ---
 function mostrarToast(mensaje, tipo = 'info') {
   let container = document.getElementById("iapci-toast-container");
   if (!container) {
@@ -100,7 +91,7 @@ function mostrarToast(mensaje, tipo = 'info') {
     toast.style.opacity = "0";
     toast.style.transform = "translateY(-10px)";
     setTimeout(() => toast.remove(), 300);
-  }, 5000); // ⏱️ Ajustado a 5 segundos exactos
+  }, 5000);
 }
 
 function solicitarConfirmacion(mensaje, accionConfirmada) {
@@ -135,9 +126,8 @@ let tasaCambioBCV = 36.50;
 let inventario = [];
 let historialMovimientos = [];
 let papeleraMovimientos = [];
-
-// --- MAPA DE ESTADOS ANTERIORES PARA DETECTAR CAMBIOS DE ESTATUS ---
 let estadosAnterioresInventario = {};
+const CAPACIDAD_MAXIMA_PAPELERA = 100;
 
 function inicializarMapaEstados() {
   estadosAnterioresInventario = {};
@@ -153,10 +143,7 @@ function inicializarMapaEstados() {
 
 async function cargarDatosRemotos() {
   try {
-    console.log("Iniciando carga de usuarios desde Firestore...");
     const snapUsuarios = await getDocs(collection(db, "iapci_usuarios"));
-    console.log("Usuarios cargados exitosamente.");
-
     if (!snapUsuarios.empty) {
       usuarios = {};
       snapUsuarios.forEach(docSnap => {
@@ -164,42 +151,31 @@ async function cargarDatosRemotos() {
       });
     }
 
-    console.log("Iniciando carga de la tasa BCV...");
     const snapTasa = await getDoc(doc(db, "iapci_tasa", "bcv"));
-    console.log("Tasa BCV cargada exitosamente.");
-
     if (snapTasa.exists()) {
       tasaCambioBCV = snapTasa.data().tasa || 36.50;
     }
 
-    console.log("Iniciando carga del inventario de stock...");
     const snapStock = await getDocs(collection(db, "iapci_stock"));
-    console.log("Inventario de stock cargado exitosamente.");
-
     inventario = [];
     snapStock.forEach(docSnap => {
       inventario.push({ idDoc: docSnap.id, ...docSnap.data() });
     });
 
-    console.log("Iniciando carga del historial de movimientos...");
     const snapHistorial = await getDocs(collection(db, "iapci_historial"));
-    console.log("Historial cargado exitosamente.");
-
     historialMovimientos = [];
     snapHistorial.forEach(docSnap => {
       historialMovimientos.push({ idDoc: docSnap.id, ...docSnap.data() });
     });
     historialMovimientos.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
-    console.log("Iniciando carga de la papelera...");
     const snapPapelera = await getDocs(collection(db, "iapci_papelera"));
-    console.log("Papelera cargada exitosamente.");
-
     papeleraMovimientos = [];
     snapPapelera.forEach(docSnap => {
       papeleraMovimientos.push({ idDoc: docSnap.id, ...docSnap.data() });
     });
 
+    inicializarMapaEstados();
   } catch (e) {
     console.error("Error al sincronizar datos remotos desde Firestore:", e);
     mostrarToast("❌ Error de conexión con la base de datos remota.", "error");
@@ -208,14 +184,11 @@ async function cargarDatosRemotos() {
 
 window.addEventListener("DOMContentLoaded", async () => {
   try {
-    console.log("Evento DOMContentLoaded disparado. Iniciando aplicación...");
     await cargarDatosRemotos();
-    console.log("Carga inicial completada correctamente.");
   } catch (error) {
     console.error("Error crítico atrapado en DOMContentLoaded:", error);
     mostrarToast("❌ Error crítico al iniciar la aplicación.", "error");
   }
-  // Se ha removido la validación de localStorage para que la sesión no se mantenga activa al refrescar.[cite: 11]
 });
 
 // --- 4. GESTIÓN DE USUARIOS CON CTRL + K ---
@@ -242,10 +215,8 @@ function toggleModalUsuarios() {
 async function guardarNuevosUsuarios() {
   const sUser = document.getElementById("cfg-user-soporte").value.trim().toLowerCase();
   const sPass = document.getElementById("cfg-pass-soporte").value;
-
   const aUser = document.getElementById("cfg-user-admin").value.trim().toLowerCase();
   const aPass = document.getElementById("cfg-pass-admin").value;
-
   const asUser = document.getElementById("cfg-user-asistente").value.trim().toLowerCase();
   const asPass = document.getElementById("cfg-pass-asistente").value;
 
@@ -475,9 +446,7 @@ function cerrarSesion() {
 }
 
 // --- 6. OPERACIONES DE INVENTARIO Y STOCK ---
-function guardarEstadoSistema() {
-  // Ya no se usa localstorage para datos de negocio, se mantiene vacío o solo para sesión activa
-}
+function guardarEstadoSistema() {}
 
 function actualizarTodo(codigoResaltar = null, indiceHistorialResaltar = null) {
   detectarYNotificarCambiosDeEstatus();
@@ -541,9 +510,10 @@ function renderTablaStock(codigoResaltar = null) {
   inventario.forEach((prod, index) => {
     const stockActual = prod.stockInic + prod.entradas - prod.salidas;
     const valorDisponibleBs = stockActual * prod.precioBs;
+    const stockMinVal = prod.stockMin !== undefined ? prod.stockMin : 12;
     
-    const estado = stockActual > (prod.stockMin !== undefined ? prod.stockMin : 12) ? "Buen Nivel" : (stockActual > 0 ? "Bajo Nivel" : "Agotado");
-    const claseBadge = stockActual > (prod.stockMin !== undefined ? prod.stockMin : 12) ? "badge-buen" : (stockActual > 0 ? "badge-bajo" : "badge-agotado");
+    const estado = stockActual > stockMinVal ? "Buen Nivel" : (stockActual > 0 ? "Bajo Nivel" : "Agotado");
+    const claseBadge = stockActual > stockMinVal ? "badge-buen" : (stockActual > 0 ? "badge-bajo" : "badge-agotado");
 
     totalInic += prod.stockInic;
     totalEntradas += prod.entradas;
@@ -572,7 +542,7 @@ function renderTablaStock(codigoResaltar = null) {
       <td>${prod.salidas}</td>
       <td><strong>${stockActual}</strong></td>
       <td>Bs.S ${valorDisponibleBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</td>
-      <td>${prod.stockMin !== undefined ? prod.stockMin : 12}</td>
+      <td>${stockMinVal}</td>
       <td><span class="${claseBadge}">${estado}</span></td>
       <td>${prod.obs || '-'}</td>
       <td><button onclick="modificarStockFila(${index})" style="background:#007bff; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">Editar</button></td>
@@ -669,7 +639,6 @@ async function modificarStockFila(index) {
       <div style="margin-bottom:10px;">
         <label style="font-size:11px; font-weight:bold; color:#555; display:block; margin-bottom:3px;">Stock Actual Total (Calculado: Inic + Ent - Sal):</label>
         <input type="number" id="ed-stk" value="${stockActualCalculado}" style="width:100%; padding:6px; box-sizing:border-box; border:1px solid #ccc; border-radius:4px; font-size:12px; background:#fff3cd; font-weight:bold;">
-        <span style="font-size:10px; color:#666; display:block; margin-top:2px;">(Modificar este valor ajustará automáticamente el stock inicial base).</span>
       </div>
 
       <div>
@@ -698,7 +667,6 @@ async function modificarStockFila(index) {
     const nuevoPrecio = parseFloat(box.querySelector("#ed-precio").value) || prod.precioBs;
     const nuevoStockMin = parseInt(box.querySelector("#ed-stkmin").value) || (prod.stockMin !== undefined ? prod.stockMin : 12);
     const nuevaObs = box.querySelector("#ed-obs").value.trim() || prod.obs;
-
     const stockDeseado = parseInt(box.querySelector("#ed-stk").value);
 
     let cambios = [];
@@ -890,15 +858,6 @@ async function registrarSalida() {
 
   if (cant <= 0) {
     mostrarToast("⚠️ Por favor introduzca una cantidad válida mayor a 0.", "warning");
-    if (cantInputElem) {
-      cantInputElem.focus();
-      cantInputElem.style.borderColor = "#c0392b";
-      cantInputElem.style.backgroundColor = "#fadbd8";
-      setTimeout(() => {
-        cantInputElem.style.borderColor = "";
-        cantInputElem.style.backgroundColor = "";
-      }, 4000);
-    }
     return;
   }
 
@@ -906,22 +865,6 @@ async function registrarSalida() {
 
   if (cant > stockActualCalculado) {
     mostrarToast(`❌ Operación imposible: La salida de (${cant}) supera el stock disponible del producto (${stockActualCalculado} ${prod.und}).`, "error");
-    
-    if (cantInputElem) {
-      cantInputElem.focus();
-      cantInputElem.style.borderColor = "#c0392b";
-      cantInputElem.style.backgroundColor = "#fadbd8";
-      cantInputElem.style.boxShadow = "0 0 8px rgba(192, 57, 43, 0.6)";
-      
-      const limpiarResaltado = () => {
-        cantInputElem.style.borderColor = "";
-        cantInputElem.style.backgroundColor = "";
-        cantInputElem.style.boxShadow = "";
-        cantInputElem.removeEventListener("input", limpiarResaltado);
-      };
-      cantInputElem.addEventListener("input", limpiarResaltado);
-      setTimeout(limpiarResaltado, 6000);
-    }
     return;
   }
 
@@ -1025,11 +968,11 @@ function eliminarRegistro() {
       }
 
       if (papeleraMovimientos.length >= CAPACIDAD_MAXIMA_PAPELERA) {
-        mostrarToast("⚠️ Advertencia: La papelera ha alcanzado su capacidad máxima de 100 registros. Vacíe la papelera para continuar.", "warning");
+        mostrarToast("⚠️ Advertencia: La papelera ha alcanzado su capacidad máxima de 100 registros.", "warning");
         return;
       }
 
-      solicitarConfirmacion("¿Desea eliminar el último movimiento registrado de la pestaña de entradas/salidas, ajustar su cantidad correspondiente en el estatus y stock, y enviar el registro a la papelera?", async () => {
+      solicitarConfirmacion("¿Desea eliminar el último movimiento registrado y enviarlo a la papelera?", async () => {
         try {
           const movEliminado = historialMovimientos.shift();
           if (!movEliminado) return;
@@ -1042,12 +985,8 @@ function eliminarRegistro() {
             const cantEntrada = movEliminado.entrada || 0;
             const cantSalida = movEliminado.salida || 0;
 
-            if (cantEntrada > 0) {
-              prod.entradas = Math.max(0, prod.entradas - cantEntrada);
-            }
-            if (cantSalida > 0) {
-              prod.salidas = Math.max(0, prod.salidas - cantSalida);
-            }
+            if (cantEntrada > 0) prod.entradas = Math.max(0, prod.entradas - cantEntrada);
+            if (cantSalida > 0) prod.salidas = Math.max(0, prod.salidas - cantSalida);
 
             if (typeof db !== "undefined" && db && prod.idDoc) {
               await updateDoc(doc(db, "iapci_stock", prod.idDoc), {
@@ -1057,28 +996,18 @@ function eliminarRegistro() {
             }
           }
 
-          const movLimpioParaPapelera = { 
-            ...movEliminado, 
-            timestamp: Date.now() 
-          };
+          const movLimpioParaPapelera = { ...movEliminado, timestamp: Date.now() };
           delete movLimpioParaPapelera.idDoc;
-
           papeleraMovimientos.unshift(movLimpioParaPapelera);
 
           if (typeof db !== "undefined" && db) {
-            try {
-              if (idDocHistorial) {
-                await deleteDoc(doc(db, "iapci_historial", idDocHistorial));
-              }
-              const docRefPapelera = await addDoc(collection(db, "iapci_papelera"), movLimpioParaPapelera);
-              movLimpioParaPapelera.idDoc = docRefPapelera.id;
-            } catch (eFire) {
-              console.error("Error al sincronizar papelera/historial en Firestore:", eFire);
-            }
+            if (idDocHistorial) await deleteDoc(doc(db, "iapci_historial", idDocHistorial));
+            const docRefPapelera = await addDoc(collection(db, "iapci_papelera"), movLimpioParaPapelera);
+            movLimpioParaPapelera.idDoc = docRefPapelera.id;
           }
 
           actualizarTodo(prod ? prod.codigo : null);
-          mostrarToast("🗑 El último registro de entrada/salida ha sido eliminado de la pestaña de registro, su stock fue ajustado correctamente y se envió a la papelera.", "success");
+          mostrarToast("🗑 El último registro ha sido eliminado y enviado a la papelera.", "success");
         } catch (err) {
           console.error("Error al eliminar registro:", err);
           mostrarToast("❌ Ocurrió un error al procesar la eliminación.", "error");
@@ -1098,7 +1027,7 @@ function limpiarFormulario() {
   document.getElementById("f-und").value = "";
   document.getElementById("f-precio").value = "";
   document.getElementById("f-cantidad").value = "";
-  document.getElementById("f-stock-min").value = "12";
+  if (document.getElementById("f-stock-min")) document.getElementById("f-stock-min").value = "12";
   document.getElementById("f-observacion").value = "";
 }
 
@@ -1106,7 +1035,6 @@ function renderReporteGeneral() {
   let totalProd = inventario.length;
   let valorTotalBs = 0, stockDisponible = 0, totalSalidas = 0;
   let buenNivel = 0, bajoNivel = 0, agotados = 0;
-
   let categoriasMap = {};
 
   inventario.forEach(prod => {
@@ -1119,13 +1047,9 @@ function renderReporteGeneral() {
     stockDisponible += stockAct;
     totalSalidas += prod.salidas;
 
-    if (stockAct > minStockVal) {
-      buenNivel++;
-    } else if (stockAct > 0) {
-      bajoNivel++;
-    } else {
-      agotados++;
-    }
+    if (stockAct > minStockVal) buenNivel++;
+    else if (stockAct > 0) bajoNivel++;
+    else agotados++;
 
     if (!categoriasMap[catNombre]) {
       categoriasMap[catNombre] = { productos: 0, stockTotal: 0, valorStockBs: 0, tieneAgotado: false, tieneBajoNivel: false };
@@ -1134,11 +1058,8 @@ function renderReporteGeneral() {
     categoriasMap[catNombre].stockTotal += stockAct;
     categoriasMap[catNombre].valorStockBs += valBs;
 
-    if (stockAct <= 0) {
-      categoriasMap[catNombre].tieneAgotado = true;
-    } else if (stockAct <= minStockVal) {
-      categoriasMap[catNombre].tieneBajoNivel = true;
-    }
+    if (stockAct <= 0) categoriasMap[catNombre].tieneAgotado = true;
+    else if (stockAct <= minStockVal) categoriasMap[catNombre].tieneBajoNivel = true;
   });
 
   const actualizarTextoPorIds = (ids, valor) => {
@@ -1158,29 +1079,25 @@ function renderReporteGeneral() {
   actualizarTextoPorIds(["leyenda-bajo-nivel"], `${bajoNivel} productos`);
   actualizarTextoPorIds(["leyenda-agotados"], `${agotados} productos`);
 
-  const idsValorBs = ["card-valor-total", "rep-valor-total-bs", "rep-val-bs", "rep-valor-bs"];
-  idsValorBs.forEach(id => {
+  ["card-valor-total", "rep-valor-total-bs", "rep-val-bs", "rep-valor-bs"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.textContent = `Bs.S ${valorTotalBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`;
   });
 
-  let contenedorReporteVista = document.getElementById("vista-reporte");
-  if (contenedorReporteVista) {
-    let btnImprimirExistente = document.getElementById("btn-imprimir-reporte-general");
-    if (!btnImprimirExistente) {
-      const headerVista = contenedorReporteVista.querySelector("h2, h3, .header-reporte, header, div");
-      const wrapperBtn = document.createElement("div");
-      wrapperBtn.style.cssText = "margin: 15px 0; text-align: right;";
-      wrapperBtn.innerHTML = `
-        <button id="btn-imprimir-reporte-general" onclick="imprimirReporte()" style="background: #27ae60; color: white; border: none; padding: 10px 18px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; box-shadow: 0 2px 6px rgba(0,0,0,0.15);">
-          🖨️ Imprimir Reporte en PDF
-        </button>
-      `;
-      if (headerVista && headerVista.parentNode) {
-        headerVista.parentNode.insertBefore(wrapperBtn, headerVista.nextSibling);
-      } else {
-        contenedorReporteVista.insertBefore(wrapperBtn, contenedorReporteVista.firstChild);
-      }
+  const contenedorReporteVista = document.getElementById("vista-reporte");
+  if (contenedorReporteVista && !document.getElementById("btn-imprimir-reporte-general")) {
+    const headerVista = contenedorReporteVista.querySelector("h2, h3, .header-reporte, header, div");
+    const wrapperBtn = document.createElement("div");
+    wrapperBtn.style.cssText = "margin: 15px 0; text-align: right;";
+    wrapperBtn.innerHTML = `
+      <button id="btn-imprimir-reporte-general" onclick="imprimirReporte()" style="background: #27ae60; color: white; border: none; padding: 10px 18px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; box-shadow: 0 2px 6px rgba(0,0,0,0.15);">
+        🖨️ Imprimir Reporte en PDF
+      </button>
+    `;
+    if (headerVista && headerVista.parentNode) {
+      headerVista.parentNode.insertBefore(wrapperBtn, headerVista.nextSibling);
+    } else {
+      contenedorReporteVista.insertBefore(wrapperBtn, contenedorReporteVista.firstChild);
     }
   }
 
@@ -1195,45 +1112,32 @@ function renderReporteGeneral() {
       sumaCatValor += datos.valorStockBs;
 
       let estadoGralTexto = "✔ Buen Nivel";
-      if (datos.tieneAgotado) {
-        estadoGralTexto = "🚫 Agotado";
-      } else if (datos.tieneBajoNivel) {
-        estadoGralTexto = "⚠️ Bajo Nivel";
-      }
+      if (datos.tieneAgotado) estadoGralTexto = "🚫 Agotado";
+      else if (datos.tieneBajoNivel) estadoGralTexto = "⚠️ Bajo Nivel";
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${catNombre}</td>
         <td>${datos.productos}</td>
         <td>${datos.stockTotal.toLocaleString('es-VE')}</td>
-        <td>Bs.S ${datos.valorStockBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</td>
+        <td>${datos.valorStockBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</td>
         <td>${estadoGralTexto}</td>
       `;
       tbodyCat.appendChild(tr);
     }
 
-    const trTotal = document.createElement("tr");
-    trTotal.style.cssText = "font-weight: bold; background-color: #f8f9fa; border-top: 2px solid #dee2e6;";
-    trTotal.innerHTML = `
-      <td>TOTALES</td>
-      <td>${sumaCatProd}</td>
-      <td>${sumaCatStock.toLocaleString('es-VE')}</td>
-      <td>Bs.S ${sumaCatValor.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</td>
-      <td>-</td>
-    `;
-    tbodyCat.appendChild(trTotal);
-
     if (document.getElementById("cat-total-productos")) document.getElementById("cat-total-productos").textContent = sumaCatProd;
     if (document.getElementById("cat-total-stock")) document.getElementById("cat-total-stock").textContent = sumaCatStock.toLocaleString('es-VE');
-    if (document.getElementById("cat-total-valor")) document.getElementById("cat-total-valor").textContent = `Bs.S ${sumaCatValor.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`;
+    if (document.getElementById("cat-total-valor")) document.getElementById("cat-total-valor").textContent = sumaCatValor.toLocaleString('es-VE', { minimumFractionDigits: 2 });
+    
+    let estadoGlobalGeneral = "✔ Buen Nivel";
+    if (agotados > 0) estadoGlobalGeneral = "🚫 Agotado";
+    else if (bajoNivel > 0) estadoGlobalGeneral = "⚠️ Bajo Nivel";
+    if (document.getElementById("cat-estado-general")) document.getElementById("cat-estado-general").textContent = estadoGlobalGeneral;
   }
 }
 
-// ==========================================
-// APARTADO EXCLUSIVO: GESTIÓN DE PAPELERA
-// ==========================================
-const CAPACIDAD_MAXIMA_PAPELERA = 100;
-
+// --- 9. PAPELERA DE RECICLAJE Y CONTROLES MODALES ---
 function toggleModalPapelera() {
   const modal = document.getElementById("modal-papelera");
   if (modal) {
@@ -1272,9 +1176,10 @@ function renderTablaPapelera() {
   let html = `
     <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; padding-bottom: 8px;">
       <span style="font-size: 13px; color: #333; font-weight: bold;">Total en papelera: ${papeleraMovimientos.length} de ${CAPACIDAD_MAXIMA_PAPELERA} registros máximos</span>
-      <div style="display: flex; gap: 8px;">
-        <button onclick="eliminarSeleccionadosPapelera()" style="background: #c0392b; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px;">🗑️ Eliminar Seleccionados</button>
-        <button onclick="vaciarPapelera()" style="background: #e74c3c; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px;">⚠️ Vaciar Papelera</button>
+      <div style="display:flex; gap:8px;">
+        <button onclick="restaurarSeleccionadosPapelera()" style="background:#27ae60; color:white; border:none; padding:5px 10px; border-radius:4px; font-size:11px; font-weight:bold; cursor:pointer;">Restaurar Seleccionados</button>
+        <button onclick="eliminarSeleccionadosPapelera()" style="background:#c0392b; color:white; border:none; padding:5px 10px; border-radius:4px; font-size:11px; font-weight:bold; cursor:pointer;">Eliminar Seleccionados</button>
+        <button onclick="vaciarPapelera()" style="background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:4px; font-size:11px; font-weight:bold; cursor:pointer;">Vaciar Papelera</button>
       </div>
     </div>
     <div style="max-height: 350px; overflow-y: auto; background: #ffffff; border-radius: 6px; border: 1px solid #ccc; padding: 5px;">
@@ -1345,100 +1250,128 @@ function seleccionarTodosPapelera(source) {
   checkboxes.forEach(chk => chk.checked = source.checked);
 }
 
-function restaurarRegistroPapelera(index) {
+async function restaurarRegistroPapelera(index) {
   verificarPermisoAdmin(async () => {
     if (index >= 0 && index < papeleraMovimientos.length) {
       const movRestaurar = papeleraMovimientos[index];
       const idDocPapelera = movRestaurar.idDoc;
       
       papeleraMovimientos.splice(index, 1);
-      
       delete movRestaurar.idDoc;
 
-      const codigoRestaurar = (movRestaurar.codigo || "").toUpperCase();
+      if (typeof db !== "undefined" && db) {
+        if (idDocPapelera) await deleteDoc(doc(db, "iapci_papelera", idDocPapelera));
+        const docRefHist = await addDoc(collection(db, "iapci_historial"), { ...movRestaurar, timestamp: Date.now() });
+        movRestaurar.idDoc = docRefHist.id;
 
-      historialMovimientos.unshift({ ...movRestaurar, timestamp: Date.now() });
+        const prodSnap = await getDocs(collection(db, "iapci_stock"));
+        let docProdEncontrado = null;
+        let dataProdEncontrada = null;
 
-      let prod = inventario.find(p => (p.codigo || "").toUpperCase() === codigoRestaurar);
-      
-      if (prod) {
-        if (movRestaurar.entrada > 0) {
-          prod.entradas += movRestaurar.entrada;
-        }
-        if (movRestaurar.salida > 0) {
-          prod.salidas += movRestaurar.salida;
-        }
-        if (movRestaurar.precio > 0) prod.precioBs = movRestaurar.precio;
+        prodSnap.forEach(d => {
+          if ((d.data().codigo || "").toUpperCase() === movRestaurar.codigo.toUpperCase()) {
+            docProdEncontrado = d.ref;
+            dataProdEncontrada = d.data();
+          }
+        });
 
-        if (typeof db !== "undefined" && db && prod.idDoc) {
-          await updateDoc(doc(db, "iapci_stock", prod.idDoc), {
-            entradas: prod.entradas,
-            salidas: prod.salidas,
-            precioBs: prod.precioBs
+        if (docProdEncontrado && dataProdEncontrada) {
+          let incEntrada = movRestaurar.entrada > 0 ? dataProdEncontrada.entradas + movRestaurar.entrada : dataProdEncontrada.entradas;
+          let incSalida = movRestaurar.salida > 0 ? dataProdEncontrada.salidas + movRestaurar.salida : dataProdEncontrada.salidas;
+          await updateDoc(docProdEncontrado, {
+            entradas: incEntrada,
+            salidas: incSalida
+          });
+        } else if (movRestaurar.entrada > 0) {
+          await addDoc(collection(db, "iapci_stock"), {
+            codigo: movRestaurar.codigo,
+            descripcion: movRestaurar.producto,
+            categoria: movRestaurar.categoria || "General",
+            pasillo: movRestaurar.pasillo || 0,
+            und: movRestaurar.und || "UND",
+            precioBs: movRestaurar.precio,
+            stockInic: movRestaurar.entrada,
+            entradas: 0,
+            salidas: 0,
+            stockMin: 12,
+            obs: movRestaurar.observacion
           });
         }
-      } else {
-        const nuevoProd = {
-          codigo: movRestaurar.codigo,
-          descripcion: movRestaurar.producto,
-          categoria: movRestaurar.categoria || "General",
-          pasillo: movRestaurar.pasillo || 0,
-          und: movRestaurar.und || "UND",
-          precioBs: movRestaurar.precio || 0,
-          stockInic: movRestaurar.entrada > 0 ? movRestaurar.entrada : 0,
-          entradas: 0,
-          salidas: movRestaurar.salida > 0 ? movRestaurar.salida : 0,
-          stockMin: 12,
-          obs: movRestaurar.observacion || "RESTAURADO DESDE PAPELERA"
-        };
-        
-        inventario.push(nuevoProd);
-
-        if (typeof db !== "undefined" && db) {
-          const docRefStock = await addDoc(collection(db, "iapci_stock"), nuevoProd);
-          nuevoProd.idDoc = docRefStock.id;
-        }
       }
 
-      if (typeof db !== "undefined" && db) {
-        if (idDocPapelera) {
-          await deleteDoc(doc(db, "iapci_papelera", idDocPapelera));
-        }
-        await addDoc(collection(db, "iapci_historial"), { ...movRestaurar, timestamp: Date.now() });
-      }
-
-      actualizarTodo(codigoRestaurar);
-      mostrarToast("✅ Registro restaurado de la papelera exitosamente y reajustado en el estatus y stock.", "success");
+      historialMovimientos.unshift(movRestaurar);
+      actualizarTodo();
       renderTablaPapelera();
+      mostrarToast("✅ Registro restaurado correctamente y sincronizado en stock.", "success");
     }
   });
 }
 
-function eliminarSeleccionadosPapelera() {
+function restaurarSeleccionadosPapelera() {
   verificarPermisoAdmin(async () => {
-    const seleccionados = Array.from(document.querySelectorAll('.chk-item-papelera:checked'))
-      .map(chk => parseInt(chk.value))
-      .sort((a, b) => b - a);
-
-    if (seleccionados.length === 0) {
-      mostrarToast("⚠️ Seleccione al menos un elemento de la papelera.", "warning");
+    const checkboxes = document.querySelectorAll('.chk-item-papelera:checked');
+    if (checkboxes.length === 0) {
+      mostrarToast("⚠️ Seleccione al menos un registro de la papelera para restaurar.", "warning");
       return;
     }
 
-    solicitarConfirmacion(`¿Está seguro de eliminar definitivamente los ${seleccionados.length} elementos seleccionados?`, async () => {
-      for (const index of seleccionados) {
+    solicitarConfirmacion(`¿Desea restaurar los ${checkboxes.length} registros seleccionados?`, async () => {
+      const indicesAEliminar = Array.from(checkboxes).map(chk => parseInt(chk.value)).sort((a, b) => b - a);
+      for (const index of indicesAEliminar) {
         if (index >= 0 && index < papeleraMovimientos.length) {
-          const item = papeleraMovimientos[index];
-          if (typeof db !== "undefined" && db && item.idDoc) {
-            await deleteDoc(doc(db, "iapci_papelera", item.idDoc));
-          }
-          papeleraMovimientos.splice(index, 1);
+          await restaurarRegistroPapeleraSilencioso(index);
         }
       }
-      mostrarToast(`✅ ${seleccionados.length} elementos eliminados permanentemente.`, "info");
       renderTablaPapelera();
+      actualizarTodo();
+      mostrarToast("✅ Registros seleccionados restaurados con éxito.", "success");
     });
   });
+}
+
+async function restaurarRegistroPapeleraSilencioso(index) {
+  const movRestaurar = papeleraMovimientos[index];
+  const idDocPapelera = movRestaurar.idDoc;
+  
+  papeleraMovimientos.splice(index, 1);
+  delete movRestaurar.idDoc;
+
+  if (typeof db !== "undefined" && db) {
+    if (idDocPapelera) await deleteDoc(doc(db, "iapci_papelera", idDocPapelera));
+    await addDoc(collection(db, "iapci_historial"), { ...movRestaurar, timestamp: Date.now() });
+
+    const prodSnap = await getDocs(collection(db, "iapci_stock"));
+    let docProdEncontrado = null;
+    let dataProdEncontrada = null;
+
+    prodSnap.forEach(d => {
+      if ((d.data().codigo || "").toUpperCase() === movRestaurar.codigo.toUpperCase()) {
+        docProdEncontrado = d.ref;
+        dataProdEncontrada = d.data();
+      }
+    });
+
+    if (docProdEncontrado && dataProdEncontrada) {
+      let incEntrada = movRestaurar.entrada > 0 ? dataProdEncontrada.entradas + movRestaurar.entrada : dataProdEncontrada.entradas;
+      let incSalida = movRestaurar.salida > 0 ? dataProdEncontrada.salidas + movRestaurar.salida : dataProdEncontrada.salidas;
+      await updateDoc(docProdEncontrado, { entradas: incEntrada, salidas: incSalida });
+    } else if (movRestaurar.entrada > 0) {
+      await addDoc(collection(db, "iapci_stock"), {
+        codigo: movRestaurar.codigo,
+        descripcion: movRestaurar.producto,
+        categoria: movRestaurar.categoria || "General",
+        pasillo: movRestaurar.pasillo || 0,
+        und: movRestaurar.und || "UND",
+        precioBs: movRestaurar.precio,
+        stockInic: movRestaurar.entrada,
+        entradas: 0,
+        salidas: 0,
+        stockMin: 12,
+        obs: movRestaurar.observacion
+      });
+    }
+  }
+  historialMovimientos.unshift(movRestaurar);
 }
 
 function vaciarPapelera() {
@@ -1447,22 +1380,41 @@ function vaciarPapelera() {
       mostrarToast("La papelera ya está vacía.", "info");
       return;
     }
-
-    solicitarConfirmacion("⚠️ ¿Está seguro de que desea vaciar permanentemente toda la papelera? Esta acción no se puede deshacer.", async () => {
-      try {
-        if (typeof db !== "undefined" && db) {
-          const snapshot = await getDocs(collection(db, "iapci_papelera"));
-          const batch = writeBatch(db);
-          snapshot.forEach(docSnap => batch.delete(docSnap.ref));
-          await batch.commit();
-        }
-      } catch (error) {
-        console.error("Error al vaciar papelera en Firestore:", error);
+    solicitarConfirmacion("⚠️ ¿Está seguro de vaciar permanentemente toda la papelera?", async () => {
+      if (typeof db !== "undefined" && db) {
+        const snapshot = await getDocs(collection(db, "iapci_papelera"));
+        const batch = writeBatch(db);
+        snapshot.forEach(d => batch.delete(d.ref));
+        await batch.commit();
       }
-
       papeleraMovimientos = [];
       renderTablaPapelera();
       mostrarToast("✅ Papelera vaciada con éxito.", "success");
+    });
+  });
+}
+
+function eliminarSeleccionadosPapelera() {
+  verificarPermisoAdmin(async () => {
+    const checkboxes = document.querySelectorAll('.chk-item-papelera:checked');
+    if (checkboxes.length === 0) {
+      mostrarToast("⚠️ Seleccione al menos un registro de la papelera para eliminar.", "warning");
+      return;
+    }
+
+    solicitarConfirmacion(`¿Desea eliminar permanentemente ${checkboxes.length} registro(s) seleccionado(s)?`, async () => {
+      const indicesAEliminar = Array.from(checkboxes).map(chk => parseInt(chk.value)).sort((a, b) => b - a);
+      for (const index of indicesAEliminar) {
+        if (index >= 0 && index < papeleraMovimientos.length) {
+          const item = papeleraMovimientos[index];
+          if (typeof db !== "undefined" && db && item.idDoc) {
+            await deleteDoc(doc(db, "iapci_papelera", item.idDoc));
+          }
+          papeleraMovimientos.splice(index, 1);
+        }
+      }
+      renderTablaPapelera();
+      mostrarToast("✅ Los registros seleccionados han sido eliminados definitivamente.", "success");
     });
   });
 }
