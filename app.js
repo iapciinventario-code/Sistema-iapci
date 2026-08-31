@@ -532,7 +532,7 @@ function detectarYNotificarCambiosDeEstatus() {
   inventario.forEach(prod => {
     const codigoKey = prod.codigo.toUpperCase();
     const stockActual = prod.stockInic + prod.entradas - prod.salidas;
-    const stockMinVal = prod.stockMin !== undefined ? prod.stockMin : 12;
+    const stockMinVal = prod.stockMin !== undefined ? prod.stockMin : 100;
     
     let estadoActual = "Buen Nivel";
     if (stockActual <= 0) {
@@ -577,7 +577,7 @@ function renderTablaStock(codigoResaltar = null) {
     const stockActual = prod.stockInic + prod.entradas - prod.salidas;
     const valorDisponibleBs = stockActual * prod.precioBs;
     
-    const stockMinVal = prod.stockMin !== undefined ? prod.stockMin : 12;
+    const stockMinVal = prod.stockMin !== undefined ? prod.stockMin : 100;
     const estado = stockActual > stockMinVal ? "Buen Nivel" : (stockActual > 0 ? "Bajo Nivel" : "Agotado");
     const claseBadge = stockActual > stockMinVal ? "badge-buen" : (stockActual > 0 ? "badge-bajo" : "badge-agotado");
 
@@ -698,7 +698,7 @@ async function modificarStockFila(index) {
         </div>
         <div>
           <label style="font-size:11px; font-weight:bold; color:#555; display:block; margin-bottom:3px;">Stock Mínimo (Alerta):</label>
-          <input type="number" id="ed-stkmin" value="${prod.stockMin !== undefined ? prod.stockMin : 12}" style="width:100%; padding:6px; box-sizing:border-box; border:1px solid #ccc; border-radius:4px; font-size:12px;">
+          <input type="number" id="ed-stkmin" value="${prod.stockMin !== undefined ? prod.stockMin : 100}" style="width:100%; padding:6px; box-sizing:border-box; border:1px solid #ccc; border-radius:4px; font-size:12px;">
         </div>
       </div>
 
@@ -732,7 +732,7 @@ async function modificarStockFila(index) {
     const nuevoPas = parseInt(box.querySelector("#ed-pas").value) || 0;
     const nuevaUnd = box.querySelector("#ed-und").value.trim() || prod.und;
     const nuevoPrecio = parseFloat(box.querySelector("#ed-precio").value) || prod.precioBs;
-    const nuevoStockMin = parseInt(box.querySelector("#ed-stkmin").value) || (prod.stockMin !== undefined ? prod.stockMin : 12);
+    const nuevoStockMin = parseInt(box.querySelector("#ed-stkmin").value) || (prod.stockMin !== undefined ? prod.stockMin : 100);
     const nuevaObs = box.querySelector("#ed-obs").value.trim() || prod.obs;
 
     const stockDeseado = parseInt(box.querySelector("#ed-stk").value);
@@ -783,47 +783,36 @@ async function modificarStockFila(index) {
   };
 }
 
-// Función añadida: Validación de campos obligatorios en la interfaz de registro[cite: 8]
 function validarYProcesarRegistro() {
-  // 1. Definir la hoja y los rangos o IDs de los campos de la interfaz
   var hoja = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("interfaz de registro");
-  
-  // Ejemplo de campos obligatorios (ajusta las celdas según tu diseño)
-  var celdasAValidar = ["B3", "B5", "B7", "B9"]; // Reemplaza con tus celdas reales
+  var celdasAValidar = ["B3", "B5", "B7", "B9"];
   var camposVacios = [];
   
-  // 2. Limpiar formatos anteriores (quitar resaltado)
   celdasAValidar.forEach(function(celdaID) {
-    hoja.getRange(celdaID).setBackground("#ffffff"); // Fondo blanco por defecto
+    hoja.getRange(celdaID).setBackground("#ffffff");
   });
   
-  // 3. Comprobar cuáles campos están vacíos
   celdasAValidar.forEach(function(celdaID) {
     var valor = hoja.getRange(celdaID).getValue();
     if (valor === "" || valor === null) {
       camposVacios.push(celdaID);
-      // Resaltar el campo vacío con un color rojo claro
       hoja.getRange(celdaID).setBackground("#f4cccc");
     }
   });
   
-  // 4. Si hay campos vacíos, detener y avisar; de lo contrario, continuar
   if (camposVacios.length > 0) {
     SpreadsheetApp.getUi().alert(
       "Atención", 
       "Debe ser llenada toda la información del producto antes de proceder. Los campos faltantes han sido resaltados.", 
       SpreadsheetApp.getUi().Button.OK
     );
-    return false; // Detiene la ejecución de la función principal
+    return false;
   }
   
-  // 5. Continuar con la lógica del botón si todo está lleno
-  // (Inserta aquí el código que ejecutan tus botones normalmente)
   SpreadsheetApp.getUi().alert("¡Registro exitoso!");
   return true;
 }
 
-// Botón: Nuevo Producto - Crea y registra un nuevo producto en el inventario y en el historial de movimientos
 function nuevoProducto() {
   verificarPermisoAdmin(async () => {
     const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
@@ -872,7 +861,6 @@ function nuevoProducto() {
   });
 }
 
-// Botón: Buscar Código - Busca un producto existente por su código y muestra sus datos en la sección de stock
 function buscarCodigo() {
   const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
   if (!codigo) {
@@ -888,7 +876,7 @@ function buscarCodigo() {
     document.getElementById("f-pasillo").value = prod.pasillo;
     document.getElementById("f-und").value = prod.und;
     if (document.getElementById("f-stock-min")) {
-      document.getElementById("f-stock-min").value = prod.stockMin !== undefined ? prod.stockMin : 12;
+      document.getElementById("f-stock-min").value = prod.stockMin !== undefined ? prod.stockMin : 100;
     }
     
     document.getElementById("f-precio").value = "";
@@ -902,7 +890,6 @@ function buscarCodigo() {
   }
 }
 
-// Botón: Registro de Entrada - Registra el ingreso de unidades de un producto existente y actualiza el stock y el historial
 async function registrarEntrada() {
   const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
   const cant = parseInt(document.getElementById("f-cantidad").value) || 0;
@@ -954,7 +941,6 @@ async function registrarEntrada() {
   }
 }
 
-// Botón: Registro de Salida - Valida rigurosamente que la salida no supere el stock disponible (frenando la operación y resaltando el campo)
 async function registrarSalida() {
   const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
   const cantInputElem = document.getElementById("f-cantidad");
@@ -1173,7 +1159,6 @@ function eliminarRegistro() {
   });
 }
 
-// Botón: Limpiar Registro - Restablece/limpia todos los campos del formulario de entrada/registro actual
 function limpiarFormulario() {
   document.getElementById("f-codigo").value = "";
   document.getElementById("f-producto").value = "";
@@ -1197,7 +1182,7 @@ function renderReporteGeneral() {
     const stockAct = prod.stockInic + prod.entradas - prod.salidas;
     const valBs = stockAct * prod.precioBs;
     const catNombre = prod.categoria ? prod.categoria.trim() : "General";
-    const minStockVal = prod.stockMin !== undefined ? prod.stockMin : 12;
+    const minStockVal = prod.stockMin !== undefined ? prod.stockMin : 100;
 
     valorTotalBs += valBs;
     stockDisponible += stockAct;
@@ -1467,7 +1452,7 @@ async function restaurarRegistroPapelera(index) {
           stockInic: movRestaurar.entrada > 0 ? movRestaurar.entrada : 0,
           entradas: 0,
           salidas: movRestaurar.salida > 0 ? movRestaurar.salida : 0,
-          stockMin: 12,
+          stockMin: 100,
           obs: movRestaurar.observacion || "RESTAURADO DESDE PAPELERA"
         };
         
@@ -1546,7 +1531,6 @@ async function vaciarPapelera() {
   });
 }
 
-// Exponer funciones globales para que funcionen con los atributos `onclick` del HTML en módulos ES
 window.iniciarSesion = iniciarSesion;
 window.cerrarSesion = cerrarSesion;
 window.cambiarPestana = cambiarPestana;
