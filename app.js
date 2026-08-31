@@ -1,49 +1,26 @@
 // ==========================================
 // CEREBRO UNIFICADO DEL SISTEMA - IAPCI 2026
-// (Sincronización Firestore Modular + Respaldo Local + Sesión Única)
+// (Sincronización Firestore en Tiempo Real + Sin Dependencias Locales)
 // ==========================================
 
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-import { 
-  getFirestore, 
-  getDocs, 
-  collection, 
-  getDoc, 
-  doc, 
-  setDoc, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  writeBatch 
-} from "firebase/firestore";
-
-const firebaseConfig = {
-  apiKey: "AIzaSyDYOOtrqzSTS8vmWpBL7-YHldXVU6tudk0",
-  authDomain: "sistema-iapci.firebaseapp.com",
-  databaseURL: "https://sistema-iapci-default-rtdb.firebaseio.com",
-  projectId: "sistema-iapci",
-  storageBucket: "sistema-iapci.firebasestorage.app",
-  messagingSenderId: "84463581447",
-  appId: "1:84463581447:web:0a1146829d38ba06fe2da2",
-  measurementId: "G-L4638HK45V"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-
-// --- 0. FUNCIÓN DE IMPRESIÓN DE REPORTE GENERAL ---
-function imprimirReporte() {
-  cambiarPestana('reporte');
-  setTimeout(() => {
-    window.print();
-  }, 200);
-}
-
-// --- 1. COMUNICACIÓN Y CONTROL DE SESIÓN ÚNICA ENTRE PESTAÑAS ---
 const canalSincronizacion = new BroadcastChannel("iapci_sincronizacion_sistema");
 const idSesionUnicaTab = Math.random().toString(36);
 let intervaloHeartbeat = null;
+
+let usuarios = {
+  "soporte": { clave: "1234", rol: "Soporte Técnico" },
+  "admin": { clave: "admin123", rol: "Administrador" },
+  "asistente": { clave: "asi123", rol: "Asistente" }
+};
+let usuarioActual = null;
+let tasaCambioBCV = 36.50;
+
+let inventario = [];
+let historialMovimientos = [];
+let papeleraMovimientos = [];
+let estadosAnterioresInventario = {};
+
+const CAPACIDAD_MAXIMA_PAPELERA = 100;
 
 canalSincronizacion.onmessage = function (event) {
   const mensaje = event.data;
@@ -52,7 +29,7 @@ canalSincronizacion.onmessage = function (event) {
   if (mensaje.tipo === "FORZAR_CIERRE_SESION") {
     if (usuarioActual && usuarioActual.rol === mensaje.rol) {
       clearInterval(intervaloHeartbeat);
-      localStorage.removeItem(`iapci_sesion_activa_${usuarioActual.rol}`);
+      sessionStorage.removeItem(`iapci_sesion_activa_${usuarioActual.rol}`);
       usuarioActual = null;
       document.getElementById("pantalla-sistema")?.classList.add("oculto");
       document.getElementById("pantalla-login")?.classList.remove("oculto");
@@ -67,7 +44,6 @@ canalSincronizacion.onmessage = function (event) {
   }
 };
 
-// --- UTILIDADES DE NOTIFICACIÓN Y DIÁLOGOS MOSTRADOS EN PANTALLA ---
 function mostrarToast(mensaje, tipo = 'info') {
   let container = document.getElementById("iapci-toast-container");
   if (!container) {
@@ -114,20 +90,76 @@ function solicitarConfirmacion(mensaje, accionConfirmada) {
   box.querySelector("#btn-conf-no").onclick = () => { document.body.removeChild(overlay); };
 }
 
-// --- 2. ESTADO GLOBAL E INICIALIZACIÓN DE DATOS REMOTOS ---
-let usuarios = {
-  "soporte": { clave: "1234", rol: "Soporte Técnico" },
-  "admin": { clave: "admin123", rol: "Administrador" },
-  "asistente": { clave: "asi123", rol: "Asistente" }
-};
-let usuarioActual = null;
-let tasaCambioBCV = 36.50;
+async function cargarDatosDesdeFirebase() {
+  if (typeof db === "undefined" || !db) {
+    mostrarToast("⚠️ Base de datos Firestore no detectada. Verifique la conexión.", "error");
+    return;
+  }
 
-let inventario = [];
-let historialMovimientos = [];
-let papeleraMovimientos = [];
-let estadosAnterioresInventario = {};
-const CAPACIDAD_MAXIMA_PAPELERA = 100;
+  try {
+    // 1. Cargar usuarios
+    const usuariosSnap = await db.collection("iapci_usuarios").get();
+    if (!usuariosSnap.empty) {
+      const uRemotos = {};
+      usuariosSnap.forEach(doc => {
+        uRemotos[doc.id] = doc.data();
+      });
+      usuarios = uRemotos;
+    }
+
+    // 2. Cargar Tasa BCV
+    const tasaDoc = await db.collection("iapci_tasa").doc("bcv").get();
+    if (tasaDoc.exists) {
+      const dataTasa = tasaDoc.data();
+      tasaCambioBCV = dataTasa.tasa || 36.50;
+    }
+
+    // 3. Cargar Inventario / Stock
+    const stockSnap = await db.collection("iapci_stock").get();
+    inventario = [];
+    stockSnap.forEach(doc => {
+      inventario.push({ idDoc: doc.id, ...doc.data() });
+    });
+
+    // 4. Cargar Historial
+    const historialSnap = await db.collection("iapci_historial").orderBy("timestamp", "desc").get();
+    historialMovimientos = [];
+    historialSnap.forEach(doc => {
+      historialMovimientos.push({ idDoc: doc.id, ...doc.data() });
+    });
+
+    // 5. Cargar Papelera
+    const papeleraSnap = await db.collection("iapci_papelera").get();
+    papeleraMovimientos = [];
+    papeleraSnap.forEach(doc => {
+      papeleraMovimientos.push({ idDoc: doc.id, ...doc.data() });
+    });
+
+    inicializarMapaEstados();
+    
+    // Verificar si había sesión activa en sessionStorage
+    const usuarioGuardado = sessionStorage.getItem("iapci_usuario_activo_nombre");
+    if (usuarioGuardado && usuarios[usuarioGuardado]) {
+      usuarioActual = usuarios[usuarioGuardado];
+      document.getElementById("pantalla-login")?.classList.add("oculto");
+      document.getElementById("pantalla-sistema")?.classList.remove("oculto");
+      document.getElementById("rol-usuario-lbl").textContent = `Usuario: ${usuarioGuardado.toUpperCase()} (${usuarioActual.rol})`;
+      document.getElementById("f-fecha").value = new Date().toLocaleDateString();
+      
+      const inputTasaElem = document.getElementById("f-tasa-cambio");
+      if (inputTasaElem) inputTasaElem.value = tasaCambioBCV;
+
+      const lblTasa = document.getElementById("lbl-tasa-actual");
+      if (lblTasa) lblTasa.textContent = `Bs. ${tasaCambioBCV.toFixed(2)} / $`;
+
+      aplicarPermisos();
+      actualizarTodo();
+    }
+  } catch (e) {
+    console.error("Error al cargar datos remotos de Firestore:", e);
+    mostrarToast("❌ Error al sincronizar con Firebase.", "error");
+  }
+}
 
 function inicializarMapaEstados() {
   estadosAnterioresInventario = {};
@@ -141,57 +173,10 @@ function inicializarMapaEstados() {
   });
 }
 
-async function cargarDatosRemotos() {
-  try {
-    const snapUsuarios = await getDocs(collection(db, "iapci_usuarios"));
-    if (!snapUsuarios.empty) {
-      usuarios = {};
-      snapUsuarios.forEach(docSnap => {
-        usuarios[docSnap.id] = docSnap.data();
-      });
-    }
-
-    const snapTasa = await getDoc(doc(db, "iapci_tasa", "bcv"));
-    if (snapTasa.exists()) {
-      tasaCambioBCV = snapTasa.data().tasa || 36.50;
-    }
-
-    const snapStock = await getDocs(collection(db, "iapci_stock"));
-    inventario = [];
-    snapStock.forEach(docSnap => {
-      inventario.push({ idDoc: docSnap.id, ...docSnap.data() });
-    });
-
-    const snapHistorial = await getDocs(collection(db, "iapci_historial"));
-    historialMovimientos = [];
-    snapHistorial.forEach(docSnap => {
-      historialMovimientos.push({ idDoc: docSnap.id, ...docSnap.data() });
-    });
-    historialMovimientos.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-
-    const snapPapelera = await getDocs(collection(db, "iapci_papelera"));
-    papeleraMovimientos = [];
-    snapPapelera.forEach(docSnap => {
-      papeleraMovimientos.push({ idDoc: docSnap.id, ...docSnap.data() });
-    });
-
-    inicializarMapaEstados();
-  } catch (e) {
-    console.error("Error al sincronizar datos remotos desde Firestore:", e);
-    mostrarToast("❌ Error de conexión con la base de datos remota.", "error");
-  }
-}
-
-window.addEventListener("DOMContentLoaded", async () => {
-  try {
-    await cargarDatosRemotos();
-  } catch (error) {
-    console.error("Error crítico atrapado en DOMContentLoaded:", error);
-    mostrarToast("❌ Error crítico al iniciar la aplicación.", "error");
-  }
+window.addEventListener("DOMContentLoaded", () => {
+  cargarDatosDesdeFirebase();
 });
 
-// --- 4. GESTIÓN DE USUARIOS CON CTRL + K ---
 function toggleModalUsuarios() {
   const modal = document.getElementById("modal-usuarios");
   if (modal) {
@@ -215,8 +200,10 @@ function toggleModalUsuarios() {
 async function guardarNuevosUsuarios() {
   const sUser = document.getElementById("cfg-user-soporte").value.trim().toLowerCase();
   const sPass = document.getElementById("cfg-pass-soporte").value;
+
   const aUser = document.getElementById("cfg-user-admin").value.trim().toLowerCase();
   const aPass = document.getElementById("cfg-pass-admin").value;
+
   const asUser = document.getElementById("cfg-user-asistente").value.trim().toLowerCase();
   const asPass = document.getElementById("cfg-pass-asistente").value;
 
@@ -236,21 +223,23 @@ async function guardarNuevosUsuarios() {
 
   if (typeof db !== "undefined" && db) {
     try {
-      const batch = writeBatch(db);
+      const batch = db.batch();
       for (const uKey in usuarios) {
-        batch.delete(doc(db, "iapci_usuarios", uKey));
+        batch.delete(db.collection("iapci_usuarios").doc(uKey));
       }
       for (const uKey in nuevosUsuarios) {
-        batch.set(doc(db, "iapci_usuarios", uKey), nuevosUsuarios[uKey]);
+        batch.set(db.collection("iapci_usuarios").doc(uKey), nuevosUsuarios[uKey]);
       }
       await batch.commit();
     } catch (e) {
       console.error("Error al actualizar usuarios en Firestore:", e);
+      mostrarToast("❌ Error al guardar usuarios en la base de datos.", "error");
+      return;
     }
   }
 
   usuarios = nuevosUsuarios;
-  mostrarToast("✅ Credenciales de usuarios actualizadas exitosamente.", "success");
+  mostrarToast("✅ Credenciales de usuarios actualizadas en Firestore exitosamente.", "success");
   toggleModalUsuarios();
 }
 
@@ -261,7 +250,6 @@ window.addEventListener("keydown", function(e) {
   }
 });
 
-// --- 5. AUTENTICACIÓN Y NAVEGACIÓN ---
 function iniciarSesion() {
   const userInput = document.getElementById("input-usuario").value.trim().toLowerCase();
   const passInput = document.getElementById("input-clave").value;
@@ -271,7 +259,7 @@ function iniciarSesion() {
     const rolIntentado = usuarios[userInput].rol;
     const claveSesionKey = `iapci_sesion_activa_${rolIntentado}`;
     
-    const sesionExistenteStr = localStorage.getItem(claveSesionKey);
+    const sesionExistenteStr = sessionStorage.getItem(claveSesionKey);
     if (sesionExistenteStr) {
       try {
         const sesionData = JSON.parse(sesionExistenteStr);
@@ -285,15 +273,15 @@ function iniciarSesion() {
     }
 
     usuarioActual = usuarios[userInput];
-    localStorage.setItem(claveSesionKey, JSON.stringify({ tabId: idSesionUnicaTab, timestamp: Date.now() }));
-    localStorage.setItem("iapci_usuario_activo_nombre", userInput);
+    sessionStorage.setItem(claveSesionKey, JSON.stringify({ tabId: idSesionUnicaTab, timestamp: Date.now() }));
+    sessionStorage.setItem("iapci_usuario_activo_nombre", userInput);
 
     canalSincronizacion.postMessage({ tipo: "FORZAR_CIERRE_SESION", rol: rolIntentado });
 
     if (intervaloHeartbeat) clearInterval(intervaloHeartbeat);
     intervaloHeartbeat = setInterval(() => {
       if (usuarioActual) {
-        localStorage.setItem(claveSesionKey, JSON.stringify({ tabId: idSesionUnicaTab, timestamp: Date.now() }));
+        sessionStorage.setItem(claveSesionKey, JSON.stringify({ tabId: idSesionUnicaTab, timestamp: Date.now() }));
       }
     }, 4000);
 
@@ -397,7 +385,7 @@ function cambiarPestana(pestana) {
   }
 }
 
-function actualizarTasa() {
+async function actualizarTasa() {
   verificarPermisoAdmin(async () => {
     const inputTasa = parseFloat(document.getElementById("f-tasa-cambio").value);
     
@@ -411,7 +399,7 @@ function actualizarTasa() {
     const hoyStr = new Date().toLocaleDateString();
 
     if (typeof db !== "undefined" && db) {
-      await setDoc(doc(db, "iapci_tasa", "bcv"), {
+      await db.collection("iapci_tasa").doc("bcv").set({
         tasa: tasaCambioBCV,
         fecha: hoyStr
       });
@@ -435,8 +423,8 @@ function aplicarPermisos() {
 function cerrarSesion() {
   if (usuarioActual) {
     clearInterval(intervaloHeartbeat);
-    localStorage.removeItem(`iapci_sesion_activa_${usuarioActual.rol}`);
-    localStorage.removeItem("iapci_usuario_activo_nombre");
+    sessionStorage.removeItem(`iapci_sesion_activa_${usuarioActual.rol}`);
+    sessionStorage.removeItem("iapci_usuario_activo_nombre");
   }
   usuarioActual = null;
   document.getElementById("pantalla-sistema")?.classList.add("oculto");
@@ -444,9 +432,6 @@ function cerrarSesion() {
   document.getElementById("input-usuario").value = "";
   document.getElementById("input-clave").value = "";
 }
-
-// --- 6. OPERACIONES DE INVENTARIO Y STOCK ---
-function guardarEstadoSistema() {}
 
 function actualizarTodo(codigoResaltar = null, indiceHistorialResaltar = null) {
   detectarYNotificarCambiosDeEstatus();
@@ -510,10 +495,9 @@ function renderTablaStock(codigoResaltar = null) {
   inventario.forEach((prod, index) => {
     const stockActual = prod.stockInic + prod.entradas - prod.salidas;
     const valorDisponibleBs = stockActual * prod.precioBs;
-    const stockMinVal = prod.stockMin !== undefined ? prod.stockMin : 12;
     
-    const estado = stockActual > stockMinVal ? "Buen Nivel" : (stockActual > 0 ? "Bajo Nivel" : "Agotado");
-    const claseBadge = stockActual > stockMinVal ? "badge-buen" : (stockActual > 0 ? "badge-bajo" : "badge-agotado");
+    const estado = stockActual > (prod.stockMin !== undefined ? prod.stockMin : 12) ? "Buen Nivel" : (stockActual > 0 ? "Bajo Nivel" : "Agotado");
+    const claseBadge = stockActual > (prod.stockMin !== undefined ? prod.stockMin : 12) ? "badge-buen" : (stockActual > 0 ? "badge-bajo" : "badge-agotado");
 
     totalInic += prod.stockInic;
     totalEntradas += prod.entradas;
@@ -542,7 +526,7 @@ function renderTablaStock(codigoResaltar = null) {
       <td>${prod.salidas}</td>
       <td><strong>${stockActual}</strong></td>
       <td>Bs.S ${valorDisponibleBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</td>
-      <td>${stockMinVal}</td>
+      <td>${prod.stockMin !== undefined ? prod.stockMin : 12}</td>
       <td><span class="${claseBadge}">${estado}</span></td>
       <td>${prod.obs || '-'}</td>
       <td><button onclick="modificarStockFila(${index})" style="background:#007bff; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">Editar</button></td>
@@ -578,7 +562,7 @@ async function modificarStockFila(index) {
   const box = document.createElement("div");
   box.style.cssText = "background: white; padding: 20px 24px; border-radius: 8px; max-width: 520px; width: 92%; max-height: 90vh; overflow-y: auto; font-family: sans-serif; box-shadow: 0 8px 24px rgba(0,0,0,0.25);";
   
-  const nombreUsuarioActivo = localStorage.getItem("iapci_usuario_activo_nombre")?.toUpperCase() || usuarioActual.rol;
+  const nombreUsuarioActivo = sessionStorage.getItem("iapci_usuario_activo_nombre")?.toUpperCase() || usuarioActual.rol;
 
   box.innerHTML = `
     <div style="border-bottom:2px solid #34495e; padding-bottom:10px; margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;">
@@ -639,6 +623,7 @@ async function modificarStockFila(index) {
       <div style="margin-bottom:10px;">
         <label style="font-size:11px; font-weight:bold; color:#555; display:block; margin-bottom:3px;">Stock Actual Total (Calculado: Inic + Ent - Sal):</label>
         <input type="number" id="ed-stk" value="${stockActualCalculado}" style="width:100%; padding:6px; box-sizing:border-box; border:1px solid #ccc; border-radius:4px; font-size:12px; background:#fff3cd; font-weight:bold;">
+        <span style="font-size:10px; color:#666; display:block; margin-top:2px;">(Modificar este valor ajustará automáticamente el stock inicial base).</span>
       </div>
 
       <div>
@@ -667,6 +652,7 @@ async function modificarStockFila(index) {
     const nuevoPrecio = parseFloat(box.querySelector("#ed-precio").value) || prod.precioBs;
     const nuevoStockMin = parseInt(box.querySelector("#ed-stkmin").value) || (prod.stockMin !== undefined ? prod.stockMin : 12);
     const nuevaObs = box.querySelector("#ed-obs").value.trim() || prod.obs;
+
     const stockDeseado = parseInt(box.querySelector("#ed-stk").value);
 
     let cambios = [];
@@ -697,10 +683,10 @@ async function modificarStockFila(index) {
     inventario[index] = prod;
 
     if (typeof db !== "undefined" && db && prod.idDoc) {
-      const docRef = doc(db, "iapci_stock", prod.idDoc);
+      const docRef = db.collection("iapci_stock").doc(prod.idDoc);
       const prodCopia = { ...prod };
       delete prodCopia.idDoc;
-      await setDoc(docRef, prodCopia);
+      await docRef.set(prodCopia);
     }
 
     document.body.removeChild(overlay);
@@ -715,7 +701,7 @@ async function modificarStockFila(index) {
   };
 }
 
-function nuevoProducto() {
+async function nuevoProducto() {
   verificarPermisoAdmin(async () => {
     const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
     const descripcion = document.getElementById("f-producto").value.trim().toUpperCase();
@@ -747,9 +733,9 @@ function nuevoProducto() {
     };
 
     if (typeof db !== "undefined" && db) {
-      const docRefStock = await addDoc(collection(db, "iapci_stock"), nuevoProdObj);
+      const docRefStock = await db.collection("iapci_stock").add(nuevoProdObj);
       nuevoProdObj.idDoc = docRefStock.id;
-      const docRefHist = await addDoc(collection(db, "iapci_historial"), nuevoHistObj);
+      const docRefHist = await db.collection("iapci_historial").add(nuevoHistObj);
       nuevoHistObj.idDoc = docRefHist.id;
     }
 
@@ -757,7 +743,7 @@ function nuevoProducto() {
     historialMovimientos.unshift(nuevoHistObj);
     actualizarTodo(null, 0);
 
-    mostrarToast(`✅ Producto "${descripcion}" guardado exitosamente.`, "success");
+    mostrarToast(`✅ Producto "${descripcion}" guardado exitosamente en Firestore.`, "success");
     limpiarFormulario();
     cambiarPestana('registro');
   });
@@ -821,12 +807,12 @@ async function registrarEntrada() {
     };
 
     if (typeof db !== "undefined" && db && prod.idDoc) {
-      await updateDoc(doc(db, "iapci_stock", prod.idDoc), {
+      await db.collection("iapci_stock").doc(prod.idDoc).update({
         precioBs: nuevoPrecioBs,
         entradas: nuevasEntradas
       });
 
-      const docRefHist = await addDoc(collection(db, "iapci_historial"), nuevoMovimiento);
+      const docRefHist = await db.collection("iapci_historial").add(nuevoMovimiento);
       nuevoMovimiento.idDoc = docRefHist.id;
     }
     
@@ -858,6 +844,15 @@ async function registrarSalida() {
 
   if (cant <= 0) {
     mostrarToast("⚠️ Por favor introduzca una cantidad válida mayor a 0.", "warning");
+    if (cantInputElem) {
+      cantInputElem.focus();
+      cantInputElem.style.borderColor = "#c0392b";
+      cantInputElem.style.backgroundColor = "#fadbd8";
+      setTimeout(() => {
+        cantInputElem.style.borderColor = "";
+        cantInputElem.style.backgroundColor = "";
+      }, 4000);
+    }
     return;
   }
 
@@ -865,6 +860,22 @@ async function registrarSalida() {
 
   if (cant > stockActualCalculado) {
     mostrarToast(`❌ Operación imposible: La salida de (${cant}) supera el stock disponible del producto (${stockActualCalculado} ${prod.und}).`, "error");
+    
+    if (cantInputElem) {
+      cantInputElem.focus();
+      cantInputElem.style.borderColor = "#c0392b";
+      cantInputElem.style.backgroundColor = "#fadbd8";
+      cantInputElem.style.boxShadow = "0 0 8px rgba(192, 57, 43, 0.6)";
+      
+      const limpiarResaltado = () => {
+        cantInputElem.style.borderColor = "";
+        cantInputElem.style.backgroundColor = "";
+        cantInputElem.style.boxShadow = "";
+        cantInputElem.removeEventListener("input", limpiarResaltado);
+      };
+      cantInputElem.addEventListener("input", limpiarResaltado);
+      setTimeout(limpiarResaltado, 6000);
+    }
     return;
   }
 
@@ -886,12 +897,12 @@ async function registrarSalida() {
   };
 
   if (typeof db !== "undefined" && db && prod.idDoc) {
-    await updateDoc(doc(db, "iapci_stock", prod.idDoc), {
+    await db.collection("iapci_stock").doc(prod.idDoc).update({
       salidas: nuevasSalidas,
       precioBs: nuevoPrecioBs
     });
 
-    const docRefHist = await addDoc(collection(db, "iapci_historial"), nuevoMovimiento);
+    const docRefHist = await db.collection("iapci_historial").add(nuevoMovimiento);
     nuevoMovimiento.idDoc = docRefHist.id;
   }
   
@@ -968,11 +979,11 @@ function eliminarRegistro() {
       }
 
       if (papeleraMovimientos.length >= CAPACIDAD_MAXIMA_PAPELERA) {
-        mostrarToast("⚠️ Advertencia: La papelera ha alcanzado su capacidad máxima de 100 registros.", "warning");
+        mostrarToast("⚠️ Advertencia: La papelera ha alcanzado su capacidad máxima de 100 registros. Vacíe la papelera para continuar.", "warning");
         return;
       }
 
-      solicitarConfirmacion("¿Desea eliminar el último movimiento registrado y enviarlo a la papelera?", async () => {
+      solicitarConfirmacion("¿Desea eliminar el último movimiento registrado, ajustar su cantidad correspondiente en el estatus y stock, y enviar el registro a la papelera en Firestore?", async () => {
         try {
           const movEliminado = historialMovimientos.shift();
           if (!movEliminado) return;
@@ -985,29 +996,43 @@ function eliminarRegistro() {
             const cantEntrada = movEliminado.entrada || 0;
             const cantSalida = movEliminado.salida || 0;
 
-            if (cantEntrada > 0) prod.entradas = Math.max(0, prod.entradas - cantEntrada);
-            if (cantSalida > 0) prod.salidas = Math.max(0, prod.salidas - cantSalida);
+            if (cantEntrada > 0) {
+              prod.entradas = Math.max(0, prod.entradas - cantEntrada);
+            }
+            if (cantSalida > 0) {
+              prod.salidas = Math.max(0, prod.salidas - cantSalida);
+            }
 
             if (typeof db !== "undefined" && db && prod.idDoc) {
-              await updateDoc(doc(db, "iapci_stock", prod.idDoc), {
+              await db.collection("iapci_stock").doc(prod.idDoc).update({
                 entradas: prod.entradas,
                 salidas: prod.salidas
               });
             }
           }
 
-          const movLimpioParaPapelera = { ...movEliminado, timestamp: Date.now() };
+          const movLimpioParaPapelera = { 
+            ...movEliminado, 
+            timestamp: Date.now() 
+          };
           delete movLimpioParaPapelera.idDoc;
+
           papeleraMovimientos.unshift(movLimpioParaPapelera);
 
           if (typeof db !== "undefined" && db) {
-            if (idDocHistorial) await deleteDoc(doc(db, "iapci_historial", idDocHistorial));
-            const docRefPapelera = await addDoc(collection(db, "iapci_papelera"), movLimpioParaPapelera);
-            movLimpioParaPapelera.idDoc = docRefPapelera.id;
+            try {
+              if (idDocHistorial) {
+                await db.collection("iapci_historial").doc(idDocHistorial).delete();
+              }
+              const docRefPapelera = await db.collection("iapci_papelera").add(movLimpioParaPapelera);
+              movLimpioParaPapelera.idDoc = docRefPapelera.id;
+            } catch (eFire) {
+              console.error("Error al sincronizar papelera/historial en Firestore:", eFire);
+            }
           }
 
           actualizarTodo(prod ? prod.codigo : null);
-          mostrarToast("🗑 El último registro ha sido eliminado y enviado a la papelera.", "success");
+          mostrarToast("🗑 El último registro ha sido eliminado, su stock fue ajustado correctamente y se envió a la papelera en la nube.", "success");
         } catch (err) {
           console.error("Error al eliminar registro:", err);
           mostrarToast("❌ Ocurrió un error al procesar la eliminación.", "error");
@@ -1027,7 +1052,7 @@ function limpiarFormulario() {
   document.getElementById("f-und").value = "";
   document.getElementById("f-precio").value = "";
   document.getElementById("f-cantidad").value = "";
-  if (document.getElementById("f-stock-min")) document.getElementById("f-stock-min").value = "12";
+  document.getElementById("f-stock-min").value = "12";
   document.getElementById("f-observacion").value = "";
 }
 
@@ -1035,6 +1060,7 @@ function renderReporteGeneral() {
   let totalProd = inventario.length;
   let valorTotalBs = 0, stockDisponible = 0, totalSalidas = 0;
   let buenNivel = 0, bajoNivel = 0, agotados = 0;
+
   let categoriasMap = {};
 
   inventario.forEach(prod => {
@@ -1047,9 +1073,13 @@ function renderReporteGeneral() {
     stockDisponible += stockAct;
     totalSalidas += prod.salidas;
 
-    if (stockAct > minStockVal) buenNivel++;
-    else if (stockAct > 0) bajoNivel++;
-    else agotados++;
+    if (stockAct > minStockVal) {
+      buenNivel++;
+    } else if (stockAct > 0) {
+      bajoNivel++;
+    } else {
+      agotados++;
+    }
 
     if (!categoriasMap[catNombre]) {
       categoriasMap[catNombre] = { productos: 0, stockTotal: 0, valorStockBs: 0, tieneAgotado: false, tieneBajoNivel: false };
@@ -1058,8 +1088,11 @@ function renderReporteGeneral() {
     categoriasMap[catNombre].stockTotal += stockAct;
     categoriasMap[catNombre].valorStockBs += valBs;
 
-    if (stockAct <= 0) categoriasMap[catNombre].tieneAgotado = true;
-    else if (stockAct <= minStockVal) categoriasMap[catNombre].tieneBajoNivel = true;
+    if (stockAct <= 0) {
+      categoriasMap[catNombre].tieneAgotado = true;
+    } else if (stockAct <= minStockVal) {
+      categoriasMap[catNombre].tieneBajoNivel = true;
+    }
   });
 
   const actualizarTextoPorIds = (ids, valor) => {
@@ -1079,25 +1112,29 @@ function renderReporteGeneral() {
   actualizarTextoPorIds(["leyenda-bajo-nivel"], `${bajoNivel} productos`);
   actualizarTextoPorIds(["leyenda-agotados"], `${agotados} productos`);
 
-  ["card-valor-total", "rep-valor-total-bs", "rep-val-bs", "rep-valor-bs"].forEach(id => {
+  const idsValorBs = ["card-valor-total", "rep-valor-total-bs", "rep-val-bs", "rep-valor-bs"];
+  idsValorBs.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.textContent = `Bs.S ${valorTotalBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`;
   });
 
-  const contenedorReporteVista = document.getElementById("vista-reporte");
-  if (contenedorReporteVista && !document.getElementById("btn-imprimir-reporte-general")) {
-    const headerVista = contenedorReporteVista.querySelector("h2, h3, .header-reporte, header, div");
-    const wrapperBtn = document.createElement("div");
-    wrapperBtn.style.cssText = "margin: 15px 0; text-align: right;";
-    wrapperBtn.innerHTML = `
-      <button id="btn-imprimir-reporte-general" onclick="imprimirReporte()" style="background: #27ae60; color: white; border: none; padding: 10px 18px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; box-shadow: 0 2px 6px rgba(0,0,0,0.15);">
-        🖨️ Imprimir Reporte en PDF
-      </button>
-    `;
-    if (headerVista && headerVista.parentNode) {
-      headerVista.parentNode.insertBefore(wrapperBtn, headerVista.nextSibling);
-    } else {
-      contenedorReporteVista.insertBefore(wrapperBtn, contenedorReporteVista.firstChild);
+  let contenedorReporteVista = document.getElementById("vista-reporte");
+  if (contenedorReporteVista) {
+    let btnImprimirExistente = document.getElementById("btn-imprimir-reporte-general");
+    if (!btnImprimirExistente) {
+      const headerVista = contenedorReporteVista.querySelector("h2, h3, .header-reporte, header, div");
+      const wrapperBtn = document.createElement("div");
+      wrapperBtn.style.cssText = "margin: 15px 0; text-align: right;";
+      wrapperBtn.innerHTML = `
+        <button id="btn-imprimir-reporte-general" onclick="imprimirReporte()" style="background: #27ae60; color: white; border: none; padding: 10px 18px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; box-shadow: 0 2px 6px rgba(0,0,0,0.15);">
+          🖨️ Imprimir Reporte en PDF
+        </button>
+      `;
+      if (headerVista && headerVista.parentNode) {
+        headerVista.parentNode.insertBefore(wrapperBtn, headerVista.nextSibling);
+      } else {
+        contenedorReporteVista.insertBefore(wrapperBtn, contenedorReporteVista.firstChild);
+      }
     }
   }
 
@@ -1112,32 +1149,47 @@ function renderReporteGeneral() {
       sumaCatValor += datos.valorStockBs;
 
       let estadoGralTexto = "✔ Buen Nivel";
-      if (datos.tieneAgotado) estadoGralTexto = "🚫 Agotado";
-      else if (datos.tieneBajoNivel) estadoGralTexto = "⚠️ Bajo Nivel";
+      if (datos.tieneAgotado) {
+        estadoGralTexto = "🚫 Agotado";
+      } else if (datos.tieneBajoNivel) {
+        estadoGralTexto = "⚠️ Bajo Nivel";
+      }
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${catNombre}</td>
         <td>${datos.productos}</td>
         <td>${datos.stockTotal.toLocaleString('es-VE')}</td>
-        <td>${datos.valorStockBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</td>
+        <td>Bs.S ${datos.valorStockBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</td>
         <td>${estadoGralTexto}</td>
       `;
       tbodyCat.appendChild(tr);
     }
 
+    const trTotal = document.createElement("tr");
+    trTotal.style.cssText = "font-weight: bold; background-color: #f8f9fa; border-top: 2px solid #dee2e6;";
+    trTotal.innerHTML = `
+      <td>TOTALES</td>
+      <td>${sumaCatProd}</td>
+      <td>${sumaCatStock.toLocaleString('es-VE')}</td>
+      <td>Bs.S ${sumaCatValor.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</td>
+      <td>-</td>
+    `;
+    tbodyCat.appendChild(trTotal);
+
     if (document.getElementById("cat-total-productos")) document.getElementById("cat-total-productos").textContent = sumaCatProd;
     if (document.getElementById("cat-total-stock")) document.getElementById("cat-total-stock").textContent = sumaCatStock.toLocaleString('es-VE');
-    if (document.getElementById("cat-total-valor")) document.getElementById("cat-total-valor").textContent = sumaCatValor.toLocaleString('es-VE', { minimumFractionDigits: 2 });
-    
-    let estadoGlobalGeneral = "✔ Buen Nivel";
-    if (agotados > 0) estadoGlobalGeneral = "🚫 Agotado";
-    else if (bajoNivel > 0) estadoGlobalGeneral = "⚠️ Bajo Nivel";
-    if (document.getElementById("cat-estado-general")) document.getElementById("cat-estado-general").textContent = estadoGlobalGeneral;
+    if (document.getElementById("cat-total-valor")) document.getElementById("cat-total-valor").textContent = `Bs.S ${sumaCatValor.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`;
   }
 }
 
-// --- 9. PAPELERA DE RECICLAJE Y CONTROLES MODALES ---
+function imprimirReporte() {
+  cambiarPestana('reporte');
+  setTimeout(() => {
+    window.print();
+  }, 200);
+}
+
 function toggleModalPapelera() {
   const modal = document.getElementById("modal-papelera");
   if (modal) {
@@ -1176,10 +1228,9 @@ function renderTablaPapelera() {
   let html = `
     <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; padding-bottom: 8px;">
       <span style="font-size: 13px; color: #333; font-weight: bold;">Total en papelera: ${papeleraMovimientos.length} de ${CAPACIDAD_MAXIMA_PAPELERA} registros máximos</span>
-      <div style="display:flex; gap:8px;">
-        <button onclick="restaurarSeleccionadosPapelera()" style="background:#27ae60; color:white; border:none; padding:5px 10px; border-radius:4px; font-size:11px; font-weight:bold; cursor:pointer;">Restaurar Seleccionados</button>
-        <button onclick="eliminarSeleccionadosPapelera()" style="background:#c0392b; color:white; border:none; padding:5px 10px; border-radius:4px; font-size:11px; font-weight:bold; cursor:pointer;">Eliminar Seleccionados</button>
-        <button onclick="vaciarPapelera()" style="background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:4px; font-size:11px; font-weight:bold; cursor:pointer;">Vaciar Papelera</button>
+      <div style="display: flex; gap: 8px;">
+        <button onclick="eliminarSeleccionadosPapelera()" style="background: #c0392b; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px;">🗑️ Eliminar Seleccionados</button>
+        <button onclick="vaciarPapelera()" style="background: #e74c3c; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px;">⚠️ Vaciar Papelera</button>
       </div>
     </div>
     <div style="max-height: 350px; overflow-y: auto; background: #ffffff; border-radius: 6px; border: 1px solid #ccc; padding: 5px;">
@@ -1250,128 +1301,100 @@ function seleccionarTodosPapelera(source) {
   checkboxes.forEach(chk => chk.checked = source.checked);
 }
 
-async function restaurarRegistroPapelera(index) {
+function restaurarRegistroPapelera(index) {
   verificarPermisoAdmin(async () => {
     if (index >= 0 && index < papeleraMovimientos.length) {
       const movRestaurar = papeleraMovimientos[index];
       const idDocPapelera = movRestaurar.idDoc;
       
       papeleraMovimientos.splice(index, 1);
+      
       delete movRestaurar.idDoc;
 
-      if (typeof db !== "undefined" && db) {
-        if (idDocPapelera) await deleteDoc(doc(db, "iapci_papelera", idDocPapelera));
-        const docRefHist = await addDoc(collection(db, "iapci_historial"), { ...movRestaurar, timestamp: Date.now() });
-        movRestaurar.idDoc = docRefHist.id;
+      const codigoRestaurar = (movRestaurar.codigo || "").toUpperCase();
 
-        const prodSnap = await getDocs(collection(db, "iapci_stock"));
-        let docProdEncontrado = null;
-        let dataProdEncontrada = null;
+      historialMovimientos.unshift({ ...movRestaurar, timestamp: Date.now() });
 
-        prodSnap.forEach(d => {
-          if ((d.data().codigo || "").toUpperCase() === movRestaurar.codigo.toUpperCase()) {
-            docProdEncontrado = d.ref;
-            dataProdEncontrada = d.data();
-          }
-        });
+      let prod = inventario.find(p => (p.codigo || "").toUpperCase() === codigoRestaurar);
+      
+      if (prod) {
+        if (movRestaurar.entrada > 0) {
+          prod.entradas += movRestaurar.entrada;
+        }
+        if (movRestaurar.salida > 0) {
+          prod.salidas += movRestaurar.salida;
+        }
+        if (movRestaurar.precio > 0) prod.precioBs = movRestaurar.precio;
 
-        if (docProdEncontrado && dataProdEncontrada) {
-          let incEntrada = movRestaurar.entrada > 0 ? dataProdEncontrada.entradas + movRestaurar.entrada : dataProdEncontrada.entradas;
-          let incSalida = movRestaurar.salida > 0 ? dataProdEncontrada.salidas + movRestaurar.salida : dataProdEncontrada.salidas;
-          await updateDoc(docProdEncontrado, {
-            entradas: incEntrada,
-            salidas: incSalida
+        if (typeof db !== "undefined" && db && prod.idDoc) {
+          await db.collection("iapci_stock").doc(prod.idDoc).update({
+            entradas: prod.entradas,
+            salidas: prod.salidas,
+            precioBs: prod.precioBs
           });
-        } else if (movRestaurar.entrada > 0) {
-          await addDoc(collection(db, "iapci_stock"), {
-            codigo: movRestaurar.codigo,
-            descripcion: movRestaurar.producto,
-            categoria: movRestaurar.categoria || "General",
-            pasillo: movRestaurar.pasillo || 0,
-            und: movRestaurar.und || "UND",
-            precioBs: movRestaurar.precio,
-            stockInic: movRestaurar.entrada,
-            entradas: 0,
-            salidas: 0,
-            stockMin: 12,
-            obs: movRestaurar.observacion
-          });
+        }
+      } else {
+        const nuevoProd = {
+          codigo: movRestaurar.codigo,
+          descripcion: movRestaurar.producto,
+          categoria: movRestaurar.categoria || "General",
+          pasillo: movRestaurar.pasillo || 0,
+          und: movRestaurar.und || "UND",
+          precioBs: movRestaurar.precio || 0,
+          stockInic: movRestaurar.entrada > 0 ? movRestaurar.entrada : 0,
+          entradas: 0,
+          salidas: movRestaurar.salida > 0 ? movRestaurar.salida : 0,
+          stockMin: 12,
+          obs: movRestaurar.observacion || "RESTAURADO DESDE PAPELERA"
+        };
+        
+        inventario.push(nuevoProd);
+
+        if (typeof db !== "undefined" && db) {
+          const docRefStock = await db.collection("iapci_stock").add(nuevoProd);
+          nuevoProd.idDoc = docRefStock.id;
         }
       }
 
-      historialMovimientos.unshift(movRestaurar);
-      actualizarTodo();
+      if (typeof db !== "undefined" && db) {
+        if (idDocPapelera) {
+          await db.collection("iapci_papelera").doc(idDocPapelera).delete();
+        }
+        await db.collection("iapci_historial").add({ ...movRestaurar, timestamp: Date.now() });
+      }
+
+      actualizarTodo(codigoRestaurar);
+      mostrarToast("✅ Registro restaurado de la papelera exitosamente y reajustado en Firestore.", "success");
       renderTablaPapelera();
-      mostrarToast("✅ Registro restaurado correctamente y sincronizado en stock.", "success");
     }
   });
 }
 
-function restaurarSeleccionadosPapelera() {
+function eliminarSeleccionadosPapelera() {
   verificarPermisoAdmin(async () => {
-    const checkboxes = document.querySelectorAll('.chk-item-papelera:checked');
-    if (checkboxes.length === 0) {
-      mostrarToast("⚠️ Seleccione al menos un registro de la papelera para restaurar.", "warning");
+    const seleccionados = Array.from(document.querySelectorAll('.chk-item-papelera:checked'))
+      .map(chk => parseInt(chk.value))
+      .sort((a, b) => b - a);
+
+    if (seleccionados.length === 0) {
+      mostrarToast("⚠️ Seleccione al menos un elemento de la papelera.", "warning");
       return;
     }
 
-    solicitarConfirmacion(`¿Desea restaurar los ${checkboxes.length} registros seleccionados?`, async () => {
-      const indicesAEliminar = Array.from(checkboxes).map(chk => parseInt(chk.value)).sort((a, b) => b - a);
-      for (const index of indicesAEliminar) {
+    solicitarConfirmacion(`¿Está seguro de eliminar definitivamente los ${seleccionados.length} elementos seleccionados de Firestore?`, async () => {
+      for (const index of seleccionados) {
         if (index >= 0 && index < papeleraMovimientos.length) {
-          await restaurarRegistroPapeleraSilencioso(index);
+          const item = papeleraMovimientos[index];
+          if (typeof db !== "undefined" && db && item.idDoc) {
+            await db.collection("iapci_papelera").doc(item.idDoc).delete();
+          }
+          papeleraMovimientos.splice(index, 1);
         }
       }
+      mostrarToast(`✅ ${seleccionados.length} elementos eliminados permanentemente de la nube.`, "info");
       renderTablaPapelera();
-      actualizarTodo();
-      mostrarToast("✅ Registros seleccionados restaurados con éxito.", "success");
     });
   });
-}
-
-async function restaurarRegistroPapeleraSilencioso(index) {
-  const movRestaurar = papeleraMovimientos[index];
-  const idDocPapelera = movRestaurar.idDoc;
-  
-  papeleraMovimientos.splice(index, 1);
-  delete movRestaurar.idDoc;
-
-  if (typeof db !== "undefined" && db) {
-    if (idDocPapelera) await deleteDoc(doc(db, "iapci_papelera", idDocPapelera));
-    await addDoc(collection(db, "iapci_historial"), { ...movRestaurar, timestamp: Date.now() });
-
-    const prodSnap = await getDocs(collection(db, "iapci_stock"));
-    let docProdEncontrado = null;
-    let dataProdEncontrada = null;
-
-    prodSnap.forEach(d => {
-      if ((d.data().codigo || "").toUpperCase() === movRestaurar.codigo.toUpperCase()) {
-        docProdEncontrado = d.ref;
-        dataProdEncontrada = d.data();
-      }
-    });
-
-    if (docProdEncontrado && dataProdEncontrada) {
-      let incEntrada = movRestaurar.entrada > 0 ? dataProdEncontrada.entradas + movRestaurar.entrada : dataProdEncontrada.entradas;
-      let incSalida = movRestaurar.salida > 0 ? dataProdEncontrada.salidas + movRestaurar.salida : dataProdEncontrada.salidas;
-      await updateDoc(docProdEncontrado, { entradas: incEntrada, salidas: incSalida });
-    } else if (movRestaurar.entrada > 0) {
-      await addDoc(collection(db, "iapci_stock"), {
-        codigo: movRestaurar.codigo,
-        descripcion: movRestaurar.producto,
-        categoria: movRestaurar.categoria || "General",
-        pasillo: movRestaurar.pasillo || 0,
-        und: movRestaurar.und || "UND",
-        precioBs: movRestaurar.precio,
-        stockInic: movRestaurar.entrada,
-        entradas: 0,
-        salidas: 0,
-        stockMin: 12,
-        obs: movRestaurar.observacion
-      });
-    }
-  }
-  historialMovimientos.unshift(movRestaurar);
 }
 
 function vaciarPapelera() {
@@ -1380,41 +1403,22 @@ function vaciarPapelera() {
       mostrarToast("La papelera ya está vacía.", "info");
       return;
     }
-    solicitarConfirmacion("⚠️ ¿Está seguro de vaciar permanentemente toda la papelera?", async () => {
-      if (typeof db !== "undefined" && db) {
-        const snapshot = await getDocs(collection(db, "iapci_papelera"));
-        const batch = writeBatch(db);
-        snapshot.forEach(d => batch.delete(d.ref));
-        await batch.commit();
+
+    solicitarConfirmacion("⚠️ ¿Está seguro de que desea vaciar permanentemente toda la papelera en Firestore? Esta acción no se puede deshacer.", async () => {
+      try {
+        if (typeof db !== "undefined" && db) {
+          const snapshot = await db.collection("iapci_papelera").get();
+          const batch = db.batch();
+          snapshot.forEach(doc => batch.delete(doc.ref));
+          await batch.commit();
+        }
+      } catch (error) {
+        console.error("Error al vaciar papelera en Firestore:", error);
       }
+
       papeleraMovimientos = [];
       renderTablaPapelera();
-      mostrarToast("✅ Papelera vaciada con éxito.", "success");
-    });
-  });
-}
-
-function eliminarSeleccionadosPapelera() {
-  verificarPermisoAdmin(async () => {
-    const checkboxes = document.querySelectorAll('.chk-item-papelera:checked');
-    if (checkboxes.length === 0) {
-      mostrarToast("⚠️ Seleccione al menos un registro de la papelera para eliminar.", "warning");
-      return;
-    }
-
-    solicitarConfirmacion(`¿Desea eliminar permanentemente ${checkboxes.length} registro(s) seleccionado(s)?`, async () => {
-      const indicesAEliminar = Array.from(checkboxes).map(chk => parseInt(chk.value)).sort((a, b) => b - a);
-      for (const index of indicesAEliminar) {
-        if (index >= 0 && index < papeleraMovimientos.length) {
-          const item = papeleraMovimientos[index];
-          if (typeof db !== "undefined" && db && item.idDoc) {
-            await deleteDoc(doc(db, "iapci_papelera", item.idDoc));
-          }
-          papeleraMovimientos.splice(index, 1);
-        }
-      }
-      renderTablaPapelera();
-      mostrarToast("✅ Los registros seleccionados han sido eliminados definitivamente.", "success");
+      mostrarToast("✅ Papelera vaciada con éxito en la base de datos.", "success");
     });
   });
 }
