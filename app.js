@@ -3,15 +3,6 @@
 // (Sincronización Firestore en Tiempo Real + Respaldo Local + Sesión Única)
 // ==========================================
 
-// --- 0. CONFIGURACIÓN E INICIALIZACIÓN DE FIREBASE ---
-const firebaseConfig = {
-  apiKey: "TU_API_KEY_REAL_DE_FIREBASE",
-  authDomain: "tu-proyecto.firebaseapp.com",
-  projectId: "tu-proyecto-id",
-  storageBucket: "tu-proyecto.appspot.com",
-  messagingSenderId: "tu_sender_id",
-  appId: "tu_app_id"
-};
 
 // Inicializar Firebase y Firestore (con respaldo de seguridad si no se carga el SDK)
 if (typeof firebase !== 'undefined') {
