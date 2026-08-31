@@ -1,23 +1,45 @@
 // ==========================================
 // CEREBRO UNIFICADO DEL SISTEMA - IAPCI 2026
-// (Sincronización Firestore en Tiempo Real + Respaldo Local + Sesión Única)
+// (Sincronización Firestore Exclusiva + Sin Almacenamiento Local)
 // ==========================================
 
-// --- 0. FUNCIÓN DE IMPRESIÓN DE REPORTE GENERAL ---
-function imprimirReporte() {
-  // Asegura que se encuentre activa la pestaña de reporte general
-  cambiarPestana('reporte');
-  
-  // Da un pequeño respiro para que el DOM renderice la vista correctamente antes de invocar la impresión
-  setTimeout(() => {
-    window.print();
-  }, 200);
-}
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { 
+  getFirestore, 
+  collection, 
+  doc, 
+  getDocs, 
+  getDoc, 
+  setDoc, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  query, 
+  orderBy, 
+  writeBatch 
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js";
 
-// --- 1. COMUNICACIÓN Y CONTROL DE SESIÓN ÚNICA ENTRE PESTAÑAS ---
 const canalSincronizacion = new BroadcastChannel("iapci_sincronizacion_sistema");
 const idSesionUnicaTab = Math.random().toString(36);
 let intervaloHeartbeat = null;
+
+let usuarios = {
+  "soporte": { clave: "1234", rol: "Soporte Técnico" },
+  "admin": { clave: "admin123", rol: "Administrador" },
+  "asistente": { clave: "asi123", rol: "Asistente" }
+};
+let usuarioActual = null;
+let tasaCambioBCV = 36.50;
+
+let inventario = [];
+let historialMovimientos = [];
+let papeleraMovimientos = [];
+let estadosAnterioresInventario = {};
+
+const CAPACIDAD_MAXIMA_PAPELERA = 100;
+let db = null;
+let app = null;
 
 canalSincronizacion.onmessage = function (event) {
   const mensaje = event.data;
@@ -26,7 +48,7 @@ canalSincronizacion.onmessage = function (event) {
   if (mensaje.tipo === "FORZAR_CIERRE_SESION") {
     if (usuarioActual && usuarioActual.rol === mensaje.rol) {
       clearInterval(intervaloHeartbeat);
-      localStorage.removeItem(`iapci_sesion_activa_${usuarioActual.rol}`);
+      sessionStorage.removeItem(`iapci_sesion_activa_${usuarioActual.rol}`);
       usuarioActual = null;
       document.getElementById("pantalla-sistema")?.classList.add("oculto");
       document.getElementById("pantalla-login")?.classList.remove("oculto");
@@ -41,7 +63,13 @@ canalSincronizacion.onmessage = function (event) {
   }
 };
 
-// --- UTILIDADES DE NOTIFICACIÓN Y DIÁLOGOS MOSTRADOS EN PANTALLA (Duración 5 segundos) ---
+function imprimirReporte() {
+  cambiarPestana('reporte');
+  setTimeout(() => {
+    window.print();
+  }, 200);
+}
+
 function mostrarToast(mensaje, tipo = 'info') {
   let container = document.getElementById("iapci-toast-container");
   if (!container) {
@@ -65,7 +93,7 @@ function mostrarToast(mensaje, tipo = 'info') {
     toast.style.opacity = "0";
     toast.style.transform = "translateY(-10px)";
     setTimeout(() => toast.remove(), 300);
-  }, 5000); // ⏱️ Ajustado a 5 segundos exactos
+  }, 5000);
 }
 
 function solicitarConfirmacion(mensaje, accionConfirmada) {
@@ -88,55 +116,102 @@ function solicitarConfirmacion(mensaje, accionConfirmada) {
   box.querySelector("#btn-conf-no").onclick = () => { document.body.removeChild(overlay); };
 }
 
-// --- 2. ESTADO GLOBAL E INICIALIZACIÓN DE DATOS LOCALES ---
-function obtenerUsuariosIniciales() {
-  const guardados = localStorage.getItem("iapci_usuarios");
-  if (guardados) {
-    try { return JSON.parse(guardados); } catch (e) { console.error("Error al cargar usuarios guardados", e); }
+async function cargarDatosDesdeFirebase() {
+  try {
+    if (!app) {
+      const firebaseConfig = {
+        apiKey: "AIzaSyDYOOtrqzSTS8vmWpBL7-YHldXVU6tudk0",
+        authDomain: "sistema-iapci.firebaseapp.com",
+        databaseURL: "https://sistema-iapci-default-rtdb.firebaseio.com",
+        projectId: "sistema-iapci",
+        storageBucket: "sistema-iapci.firebasestorage.app",
+        messagingSenderId: "84463581447",
+        appId: "1:84463581447:web:0a1146829d38ba06fe2da2",
+        measurementId: "G-L4638HK45V"
+      };
+      app = initializeApp(firebaseConfig);
+      db = getFirestore(app);
+      try {
+        getAnalytics(app);
+      } catch (eAnalytics) {
+        console.warn("Analytics no soportado:", eAnalytics);
+      }
+      window.db = db;
+      console.log("✅ Conectado a Firebase Firestore (Exclusivo en la Nube).");
+    }
+
+    // 1. Cargar usuarios
+    const usuariosSnap = await getDocs(collection(db, "iapci_usuarios"));
+    if (!usuariosSnap.empty) {
+      const uRemotos = {};
+      usuariosSnap.forEach(docSnap => {
+        uRemotos[docSnap.id] = docSnap.data();
+      });
+      usuarios = uRemotos;
+    } else {
+      const batch = writeBatch(db);
+      for (const uKey in usuarios) {
+        batch.set(doc(db, "iapci_usuarios", uKey), usuarios[uKey]);
+      }
+      await batch.commit();
+    }
+
+    // 2. Cargar Tasa BCV
+    const tasaDocRef = doc(db, "iapci_tasa", "bcv");
+    const tasaDocSnap = await getDoc(tasaDocRef);
+    if (tasaDocSnap.exists()) {
+      const dataTasa = tasaDocSnap.data();
+      tasaCambioBCV = dataTasa.tasa || 36.50;
+    } else {
+      await setDoc(tasaDocRef, { tasa: tasaCambioBCV, fecha: new Date().toLocaleDateString() });
+    }
+
+    // 3. Cargar Inventario / Stock
+    const stockSnap = await getDocs(collection(db, "iapci_stock"));
+    inventario = [];
+    stockSnap.forEach(docSnap => {
+      inventario.push({ idDoc: docSnap.id, ...docSnap.data() });
+    });
+
+    // 4. Cargar Historial
+    const histQuery = query(collection(db, "iapci_historial"), orderBy("timestamp", "desc"));
+    const historialSnap = await getDocs(histQuery);
+    historialMovimientos = [];
+    historialSnap.forEach(docSnap => {
+      historialMovimientos.push({ idDoc: docSnap.id, ...docSnap.data() });
+    });
+
+    // 5. Cargar Papelera
+    const papeleraSnap = await getDocs(collection(db, "iapci_papelera"));
+    papeleraMovimientos = [];
+    papeleraSnap.forEach(docSnap => {
+      papeleraMovimientos.push({ idDoc: docSnap.id, ...docSnap.data() });
+    });
+
+    inicializarMapaEstados();
+    
+    const usuarioGuardado = sessionStorage.getItem("iapci_usuario_activo_nombre");
+    if (usuarioGuardado && usuarios[usuarioGuardado]) {
+      usuarioActual = usuarios[usuarioGuardado];
+      document.getElementById("pantalla-login")?.classList.add("oculto");
+      document.getElementById("pantalla-sistema")?.classList.remove("oculto");
+      document.getElementById("rol-usuario-lbl").textContent = `Usuario: ${usuarioGuardado.toUpperCase()} (${usuarioActual.rol})`;
+      document.getElementById("f-fecha").value = new Date().toLocaleDateString();
+      
+      const inputTasaElem = document.getElementById("f-tasa-cambio");
+      if (inputTasaElem) inputTasaElem.value = tasaCambioBCV;
+
+      const lblTasa = document.getElementById("lbl-tasa-actual");
+      if (lblTasa) lblTasa.textContent = `Bs. ${tasaCambioBCV.toFixed(2)} / $`;
+
+      aplicarPermisos();
+      actualizarTodo();
+    }
+  } catch (e) {
+    console.error("Error al cargar datos remotos de Firestore:", e);
+    mostrarToast("❌ Error al sincronizar con Firebase.", "error");
   }
-  return {
-    "soporte": { clave: "1234", rol: "Soporte Técnico" },
-    "admin": { clave: "admin123", rol: "Administrador" },
-    "asistente": { clave: "asi123", rol: "Asistente" }
-  };
 }
-
-function obtenerTasaInicial() {
-  const hoyStr = new Date().toLocaleDateString();
-  const tasaGuardada = localStorage.getItem("tasa_valor");
-  const fechaGuardada = localStorage.getItem("tasa_fecha");
-
-  if (tasaGuardada && fechaGuardada === hoyStr) {
-    return parseFloat(tasaGuardada);
-  }
-  return 36.50;
-}
-
-function obtenerInventarioInicial() {
-  const guardado = localStorage.getItem("iapci_inventario");
-  if (guardado) {
-    try { return JSON.parse(guardado); } catch (e) { console.error("Error al cargar inventario local", e); }
-  }
-  return [];
-}
-
-function obtenerHistorialInicial() {
-  const guardado = localStorage.getItem("iapci_historial");
-  if (guardado) {
-    try { return JSON.parse(guardado); } catch (e) { console.error("Error al cargar historial local", e); }
-  }
-  return [];
-}
-
-let usuarios = obtenerUsuariosIniciales();
-let usuarioActual = null;
-let tasaCambioBCV = obtenerTasaInicial();
-
-let inventario = obtenerInventarioInicial();
-let historialMovimientos = obtenerHistorialInicial();
-
-// --- MAPA DE ESTADOS ANTERIORES PARA DETECTAR CAMBIOS DE ESTATUS ---
-let estadosAnterioresInventario = {};
 
 function inicializarMapaEstados() {
   estadosAnterioresInventario = {};
@@ -151,27 +226,9 @@ function inicializarMapaEstados() {
 }
 
 window.addEventListener("DOMContentLoaded", () => {
-  const usuarioGuardado = localStorage.getItem("iapci_usuario_activo_nombre");
-  if (usuarioGuardado && usuarios[usuarioGuardado]) {
-    usuarioActual = usuarios[usuarioGuardado];
-    document.getElementById("pantalla-login")?.classList.add("oculto");
-    document.getElementById("pantalla-sistema")?.classList.remove("oculto");
-    document.getElementById("rol-usuario-lbl").textContent = `Usuario: ${usuarioGuardado.toUpperCase()} (${usuarioActual.rol})`;
-    document.getElementById("f-fecha").value = new Date().toLocaleDateString();
-    
-    const inputTasaElem = document.getElementById("f-tasa-cambio");
-    if (inputTasaElem) inputTasaElem.value = tasaCambioBCV;
-
-    const lblTasa = document.getElementById("lbl-tasa-actual");
-    if (lblTasa) lblTasa.textContent = `Bs. ${tasaCambioBCV.toFixed(2)} / $`;
-
-    inicializarMapaEstados();
-    aplicarPermisos();
-    actualizarTodo();
-  }
+  cargarDatosDesdeFirebase();
 });
 
-// --- 4. GESTIÓN DE USUARIOS CON CTRL + K ---
 function toggleModalUsuarios() {
   const modal = document.getElementById("modal-usuarios");
   if (modal) {
@@ -216,24 +273,25 @@ async function guardarNuevosUsuarios() {
   nuevosUsuarios[aUser] = { clave: aPass || usuarios[oldAdmin]?.clave || "admin123", rol: "Administrador" };
   nuevosUsuarios[asUser] = { clave: asPass || usuarios[oldAsistente]?.clave || "asi123", rol: "Asistente" };
 
-  if (typeof db !== "undefined" && db) {
+  if (db) {
     try {
-      const batch = db.batch();
+      const batch = writeBatch(db);
       for (const uKey in usuarios) {
-        batch.delete(db.collection("iapci_usuarios").doc(uKey));
+        batch.delete(doc(db, "iapci_usuarios", uKey));
       }
       for (const uKey in nuevosUsuarios) {
-        batch.set(db.collection("iapci_usuarios").doc(uKey), nuevosUsuarios[uKey]);
+        batch.set(doc(db, "iapci_usuarios", uKey), nuevosUsuarios[uKey]);
       }
       await batch.commit();
     } catch (e) {
       console.error("Error al actualizar usuarios en Firestore:", e);
+      mostrarToast("❌ Error al guardar usuarios en la base de datos.", "error");
+      return;
     }
   }
 
   usuarios = nuevosUsuarios;
-  localStorage.setItem("iapci_usuarios", JSON.stringify(usuarios));
-  mostrarToast("✅ Credenciales de usuarios actualizadas exitosamente.", "success");
+  mostrarToast("✅ Credenciales de usuarios actualizadas en Firestore exitosamente.", "success");
   toggleModalUsuarios();
 }
 
@@ -244,7 +302,6 @@ window.addEventListener("keydown", function(e) {
   }
 });
 
-// --- 5. AUTENTICACIÓN Y NAVEGACIÓN ---
 function iniciarSesion() {
   const userInput = document.getElementById("input-usuario").value.trim().toLowerCase();
   const passInput = document.getElementById("input-clave").value;
@@ -254,7 +311,7 @@ function iniciarSesion() {
     const rolIntentado = usuarios[userInput].rol;
     const claveSesionKey = `iapci_sesion_activa_${rolIntentado}`;
     
-    const sesionExistenteStr = localStorage.getItem(claveSesionKey);
+    const sesionExistenteStr = sessionStorage.getItem(claveSesionKey);
     if (sesionExistenteStr) {
       try {
         const sesionData = JSON.parse(sesionExistenteStr);
@@ -268,15 +325,15 @@ function iniciarSesion() {
     }
 
     usuarioActual = usuarios[userInput];
-    localStorage.setItem(claveSesionKey, JSON.stringify({ tabId: idSesionUnicaTab, timestamp: Date.now() }));
-    localStorage.setItem("iapci_usuario_activo_nombre", userInput);
+    sessionStorage.setItem(claveSesionKey, JSON.stringify({ tabId: idSesionUnicaTab, timestamp: Date.now() }));
+    sessionStorage.setItem("iapci_usuario_activo_nombre", userInput);
 
     canalSincronizacion.postMessage({ tipo: "FORZAR_CIERRE_SESION", rol: rolIntentado });
 
     if (intervaloHeartbeat) clearInterval(intervaloHeartbeat);
     intervaloHeartbeat = setInterval(() => {
       if (usuarioActual) {
-        localStorage.setItem(claveSesionKey, JSON.stringify({ tabId: idSesionUnicaTab, timestamp: Date.now() }));
+        sessionStorage.setItem(claveSesionKey, JSON.stringify({ tabId: idSesionUnicaTab, timestamp: Date.now() }));
       }
     }, 4000);
 
@@ -380,7 +437,7 @@ function cambiarPestana(pestana) {
   }
 }
 
-function actualizarTasa() {
+async function actualizarTasa() {
   verificarPermisoAdmin(async () => {
     const inputTasa = parseFloat(document.getElementById("f-tasa-cambio").value);
     
@@ -393,8 +450,8 @@ function actualizarTasa() {
     tasaCambioBCV = inputTasa;
     const hoyStr = new Date().toLocaleDateString();
 
-    if (typeof db !== "undefined" && db) {
-      await db.collection("iapci_tasa").doc("bcv").set({
+    if (db) {
+      await setDoc(doc(db, "iapci_tasa", "bcv"), {
         tasa: tasaCambioBCV,
         fecha: hoyStr
       });
@@ -418,8 +475,8 @@ function aplicarPermisos() {
 function cerrarSesion() {
   if (usuarioActual) {
     clearInterval(intervaloHeartbeat);
-    localStorage.removeItem(`iapci_sesion_activa_${usuarioActual.rol}`);
-    localStorage.removeItem("iapci_usuario_activo_nombre");
+    sessionStorage.removeItem(`iapci_sesion_activa_${usuarioActual.rol}`);
+    sessionStorage.removeItem("iapci_usuario_activo_nombre");
   }
   usuarioActual = null;
   document.getElementById("pantalla-sistema")?.classList.add("oculto");
@@ -428,26 +485,13 @@ function cerrarSesion() {
   document.getElementById("input-clave").value = "";
 }
 
-// --- 6. OPERACIONES DE INVENTARIO Y STOCK ---
-function guardarEstadoSistema() {
-  localStorage.setItem("iapci_inventario", JSON.stringify(inventario));
-  localStorage.setItem("iapci_historial", JSON.stringify(historialMovimientos));
-  localStorage.setItem("iapci_papelera", JSON.stringify(papeleraMovimientos));
-}
-
 function actualizarTodo(codigoResaltar = null, indiceHistorialResaltar = null) {
-  // Guardar estado actual
-  guardarEstadoSistema();
-
-  // Detectar cambios de estatus antes de actualizar las vistas de stock
   detectarYNotificarCambiosDeEstatus();
 
-  // Actualizar las interfaces y tablas activas
   renderTablaStock(codigoResaltar);
   renderTablaHistorial(indiceHistorialResaltar);
   renderReporteGeneral();
 
-  // Notificar a otras pestañas abiertas mediante el canal de sincronización
   try {
     canalSincronizacion.postMessage({ tipo: "ACTUALIZAR_ESTADO_SISTEMA" });
   } catch (e) {
@@ -470,27 +514,25 @@ function detectarYNotificarCambiosDeEstatus() {
 
     const estadoAnterior = estadosAnterioresInventario[codigoKey];
 
-    // Si ya existía y cambió de estado, disparamos la notificación específica
     if (estadoAnterior && estadoAnterior !== estadoActual) {
       const descProd = prod.descripcion || prod.codigo;
       let tipoNotif = "info";
       let icono = "ℹ️";
 
       if (estadoActual === "Buen Nivel") {
-        tipoNotif = "success"; // Verde
+        tipoNotif = "success";
         icono = "✅";
       } else if (estadoActual === "Bajo Nivel") {
-        tipoNotif = "warning"; // Naranja
+        tipoNotif = "warning";
         icono = "⚠️";
       } else if (estadoActual === "Agotado") {
-        tipoNotif = "error"; // Rojo
+        tipoNotif = "error";
         icono = "🚨";
       }
 
       mostrarToast(`${icono} Cambio de estatus [${prod.codigo} - ${descProd}]: De "${estadoAnterior}" ➔ Nuevo Estado: "${estadoActual}"`, tipoNotif);
     }
 
-    // Actualizamos el registro del estado actual
     estadosAnterioresInventario[codigoKey] = estadoActual;
   });
 }
@@ -572,7 +614,7 @@ async function modificarStockFila(index) {
   const box = document.createElement("div");
   box.style.cssText = "background: white; padding: 20px 24px; border-radius: 8px; max-width: 520px; width: 92%; max-height: 90vh; overflow-y: auto; font-family: sans-serif; box-shadow: 0 8px 24px rgba(0,0,0,0.25);";
   
-  const nombreUsuarioActivo = localStorage.getItem("iapci_usuario_activo_nombre")?.toUpperCase() || usuarioActual.rol;
+  const nombreUsuarioActivo = sessionStorage.getItem("iapci_usuario_activo_nombre")?.toUpperCase() || usuarioActual.rol;
 
   box.innerHTML = `
     <div style="border-bottom:2px solid #34495e; padding-bottom:10px; margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;">
@@ -692,11 +734,11 @@ async function modificarStockFila(index) {
 
     inventario[index] = prod;
 
-    if (typeof db !== "undefined" && db && prod.idDoc) {
-      const docRef = db.collection("iapci_stock").doc(prod.idDoc);
+    if (db && prod.idDoc) {
+      const docRef = doc(db, "iapci_stock", prod.idDoc);
       const prodCopia = { ...prod };
       delete prodCopia.idDoc;
-      await docRef.set(prodCopia);
+      await setDoc(docRef, prodCopia);
     }
 
     document.body.removeChild(overlay);
@@ -711,8 +753,7 @@ async function modificarStockFila(index) {
   };
 }
 
-// Botón: Nuevo Producto - Crea y registra un nuevo producto en el inventario y en el historial de movimientos
-function nuevoProducto() {
+async function nuevoProducto() {
   verificarPermisoAdmin(async () => {
     const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
     const descripcion = document.getElementById("f-producto").value.trim().toUpperCase();
@@ -743,10 +784,10 @@ function nuevoProducto() {
       fecha: new Date().toLocaleDateString(), codigo, producto: descripcion, categoria, pasillo, und, precio: precioBs, entrada: cantInic, salida: 0, observacion: obs, timestamp: Date.now()
     };
 
-    if (typeof db !== "undefined" && db) {
-      const docRefStock = await db.collection("iapci_stock").add(nuevoProdObj);
+    if (db) {
+      const docRefStock = await addDoc(collection(db, "iapci_stock"), nuevoProdObj);
       nuevoProdObj.idDoc = docRefStock.id;
-      const docRefHist = await db.collection("iapci_historial").add(nuevoHistObj);
+      const docRefHist = await addDoc(collection(db, "iapci_historial"), nuevoHistObj);
       nuevoHistObj.idDoc = docRefHist.id;
     }
 
@@ -754,13 +795,12 @@ function nuevoProducto() {
     historialMovimientos.unshift(nuevoHistObj);
     actualizarTodo(null, 0);
 
-    mostrarToast(`✅ Producto "${descripcion}" guardado exitosamente.`, "success");
+    mostrarToast(`✅ Producto "${descripcion}" guardado exitosamente en Firestore.`, "success");
     limpiarFormulario();
     cambiarPestana('registro');
   });
 }
 
-// Botón: Buscar Código - Busca un producto existente por su código y muestra sus datos en la sección de stock
 function buscarCodigo() {
   const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
   if (!codigo) {
@@ -790,7 +830,6 @@ function buscarCodigo() {
   }
 }
 
-// Botón: Registro de Entrada - Registra el ingreso de unidades de un producto existente y actualiza el stock y el historial
 async function registrarEntrada() {
   const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
   const cant = parseInt(document.getElementById("f-cantidad").value) || 0;
@@ -819,13 +858,13 @@ async function registrarEntrada() {
       timestamp: Date.now()
     };
 
-    if (typeof db !== "undefined" && db && prod.idDoc) {
-      await db.collection("iapci_stock").doc(prod.idDoc).update({
+    if (db && prod.idDoc) {
+      await updateDoc(doc(db, "iapci_stock", prod.idDoc), {
         precioBs: nuevoPrecioBs,
         entradas: nuevasEntradas
       });
 
-      const docRefHist = await db.collection("iapci_historial").add(nuevoMovimiento);
+      const docRefHist = await addDoc(collection(db, "iapci_historial"), nuevoMovimiento);
       nuevoMovimiento.idDoc = docRefHist.id;
     }
     
@@ -842,7 +881,6 @@ async function registrarEntrada() {
   }
 }
 
-// Botón: Registro de Salida - Valida rigurosamente que la salida no supere el stock disponible (frenando la operación y resaltando el campo)
 async function registrarSalida() {
   const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
   const cantInputElem = document.getElementById("f-cantidad");
@@ -872,7 +910,6 @@ async function registrarSalida() {
 
   const stockActualCalculado = prod.stockInic + prod.entradas - prod.salidas;
 
-  // 🛑 Validación estricta solicitada: frena la operación si la salida supera el stock disponible
   if (cant > stockActualCalculado) {
     mostrarToast(`❌ Operación imposible: La salida de (${cant}) supera el stock disponible del producto (${stockActualCalculado} ${prod.und}).`, "error");
     
@@ -882,7 +919,6 @@ async function registrarSalida() {
       cantInputElem.style.backgroundColor = "#fadbd8";
       cantInputElem.style.boxShadow = "0 0 8px rgba(192, 57, 43, 0.6)";
       
-      // Permitir su modificación continua quitando el resaltado al escribir o después de un momento
       const limpiarResaltado = () => {
         cantInputElem.style.borderColor = "";
         cantInputElem.style.backgroundColor = "";
@@ -892,7 +928,7 @@ async function registrarSalida() {
       cantInputElem.addEventListener("input", limpiarResaltado);
       setTimeout(limpiarResaltado, 6000);
     }
-    return; // Frena la ejecución del registro de salida
+    return;
   }
 
   const nuevasSalidas = prod.salidas + cant;
@@ -912,13 +948,13 @@ async function registrarSalida() {
     timestamp: Date.now()
   };
 
-  if (typeof db !== "undefined" && db && prod.idDoc) {
-    await db.collection("iapci_stock").doc(prod.idDoc).update({
+  if (db && prod.idDoc) {
+    await updateDoc(doc(db, "iapci_stock", prod.idDoc), {
       salidas: nuevasSalidas,
       precioBs: nuevoPrecioBs
     });
 
-    const docRefHist = await db.collection("iapci_historial").add(nuevoMovimiento);
+    const docRefHist = await addDoc(collection(db, "iapci_historial"), nuevoMovimiento);
     nuevoMovimiento.idDoc = docRefHist.id;
   }
   
@@ -986,8 +1022,7 @@ function renderTablaHistorial(indiceResaltar = null) {
   }
 }
 
-// Botón: Eliminar Último Registro (Ajustando stock y enviando a papelera)
-function eliminarRegistro() {
+async function eliminarRegistro() {
   verificarPermisoAdmin(async () => {
     try {
       if (!historialMovimientos || historialMovimientos.length === 0) {
@@ -1000,7 +1035,7 @@ function eliminarRegistro() {
         return;
       }
 
-      solicitarConfirmacion("¿Desea eliminar el último movimiento registrado de la pestaña de entradas/salidas, ajustar su cantidad correspondiente en el estatus y stock, y enviar el registro a la papelera?", async () => {
+      solicitarConfirmacion("¿Desea eliminar el último movimiento registrado, ajustar su cantidad correspondiente en el estatus y stock, y enviar el registro a la papelera en Firestore?", async () => {
         try {
           const movEliminado = historialMovimientos.shift();
           if (!movEliminado) return;
@@ -1020,8 +1055,8 @@ function eliminarRegistro() {
               prod.salidas = Math.max(0, prod.salidas - cantSalida);
             }
 
-            if (typeof db !== "undefined" && db && prod.idDoc) {
-              await db.collection("iapci_stock").doc(prod.idDoc).update({
+            if (db && prod.idDoc) {
+              await updateDoc(doc(db, "iapci_stock", prod.idDoc), {
                 entradas: prod.entradas,
                 salidas: prod.salidas
               });
@@ -1036,12 +1071,12 @@ function eliminarRegistro() {
 
           papeleraMovimientos.unshift(movLimpioParaPapelera);
 
-          if (typeof db !== "undefined" && db) {
+          if (db) {
             try {
               if (idDocHistorial) {
-                await db.collection("iapci_historial").doc(idDocHistorial).delete();
+                await deleteDoc(doc(db, "iapci_historial", idDocHistorial));
               }
-              const docRefPapelera = await db.collection("iapci_papelera").add(movLimpioParaPapelera);
+              const docRefPapelera = await addDoc(collection(db, "iapci_papelera"), movLimpioParaPapelera);
               movLimpioParaPapelera.idDoc = docRefPapelera.id;
             } catch (eFire) {
               console.error("Error al sincronizar papelera/historial en Firestore:", eFire);
@@ -1049,7 +1084,7 @@ function eliminarRegistro() {
           }
 
           actualizarTodo(prod ? prod.codigo : null);
-          mostrarToast("🗑 El último registro de entrada/salida ha sido eliminado de la pestaña de registro, su stock fue ajustado correctamente y se envió a la papelera.", "success");
+          mostrarToast("🗑 El último registro ha sido eliminado, su stock fue ajustado correctamente y se envió a la papelera en la nube.", "success");
         } catch (err) {
           console.error("Error al eliminar registro:", err);
           mostrarToast("❌ Ocurrió un error al procesar la eliminación.", "error");
@@ -1061,7 +1096,6 @@ function eliminarRegistro() {
   });
 }
 
-// Botón: Limpiar Registro - Restablece/limpia todos los campos del formulario de entrada/registro actual
 function limpiarFormulario() {
   document.getElementById("f-codigo").value = "";
   document.getElementById("f-producto").value = "";
@@ -1074,7 +1108,6 @@ function limpiarFormulario() {
   document.getElementById("f-observacion").value = "";
 }
 
-// --- FUNCIÓN ACTUALIZADA Y UNIFICADA DE REPORTE GENERAL ---
 function renderReporteGeneral() {
   let totalProd = inventario.length;
   let valorTotalBs = 0, stockDisponible = 0, totalSalidas = 0;
@@ -1202,21 +1235,6 @@ function renderReporteGeneral() {
   }
 }
 
-// ==========================================
-// APARTADO EXCLUSIVO: GESTIÓN DE PAPELERA
-// ==========================================
-const CAPACIDAD_MAXIMA_PAPELERA = 100;
-
-function obtenerPapeleraInicial() {
-  const guardado = localStorage.getItem("iapci_papelera");
-  if (guardado) {
-    try { return JSON.parse(guardado); } catch (e) { console.error("Error al cargar papelera local", e); }
-  }
-  return [];
-}
-
-let papeleraMovimientos = obtenerPapeleraInicial();
-
 function toggleModalPapelera() {
   const modal = document.getElementById("modal-papelera");
   if (modal) {
@@ -1328,7 +1346,7 @@ function seleccionarTodosPapelera(source) {
   checkboxes.forEach(chk => chk.checked = source.checked);
 }
 
-function restaurarRegistroPapelera(index) {
+async function restaurarRegistroPapelera(index) {
   verificarPermisoAdmin(async () => {
     if (index >= 0 && index < papeleraMovimientos.length) {
       const movRestaurar = papeleraMovimientos[index];
@@ -1353,8 +1371,8 @@ function restaurarRegistroPapelera(index) {
         }
         if (movRestaurar.precio > 0) prod.precioBs = movRestaurar.precio;
 
-        if (typeof db !== "undefined" && db && prod.idDoc) {
-          await db.collection("iapci_stock").doc(prod.idDoc).update({
+        if (db && prod.idDoc) {
+          await updateDoc(doc(db, "iapci_stock", prod.idDoc), {
             entradas: prod.entradas,
             salidas: prod.salidas,
             precioBs: prod.precioBs
@@ -1377,27 +1395,27 @@ function restaurarRegistroPapelera(index) {
         
         inventario.push(nuevoProd);
 
-        if (typeof db !== "undefined" && db) {
-          const docRefStock = await db.collection("iapci_stock").add(nuevoProd);
+        if (db) {
+          const docRefStock = await addDoc(collection(db, "iapci_stock"), nuevoProd);
           nuevoProd.idDoc = docRefStock.id;
         }
       }
 
-      if (typeof db !== "undefined" && db) {
+      if (db) {
         if (idDocPapelera) {
-          await db.collection("iapci_papelera").doc(idDocPapelera).delete();
+          await deleteDoc(doc(db, "iapci_papelera", idDocPapelera));
         }
-        await db.collection("iapci_historial").add({ ...movRestaurar, timestamp: Date.now() });
+        await addDoc(collection(db, "iapci_historial"), { ...movRestaurar, timestamp: Date.now() });
       }
 
       actualizarTodo(codigoRestaurar);
-      mostrarToast("✅ Registro restaurado de la papelera exitosamente y reajustado en el estatus y stock.", "success");
+      mostrarToast("✅ Registro restaurado de la papelera exitosamente y reajustado en Firestore.", "success");
       renderTablaPapelera();
     }
   });
 }
 
-function eliminarSeleccionadosPapelera() {
+async function eliminarSeleccionadosPapelera() {
   verificarPermisoAdmin(async () => {
     const seleccionados = Array.from(document.querySelectorAll('.chk-item-papelera:checked'))
       .map(chk => parseInt(chk.value))
@@ -1408,36 +1426,35 @@ function eliminarSeleccionadosPapelera() {
       return;
     }
 
-    solicitarConfirmacion(`¿Está seguro de eliminar definitivamente los ${seleccionados.length} elementos seleccionados?`, async () => {
+    solicitarConfirmacion(`¿Está seguro de eliminar definitivamente los ${seleccionados.length} elementos seleccionados de Firestore?`, async () => {
       for (const index of seleccionados) {
         if (index >= 0 && index < papeleraMovimientos.length) {
           const item = papeleraMovimientos[index];
-          if (typeof db !== "undefined" && db && item.idDoc) {
-            await db.collection("iapci_papelera").doc(item.idDoc).delete();
+          if (db && item.idDoc) {
+            await deleteDoc(doc(db, "iapci_papelera", item.idDoc));
           }
           papeleraMovimientos.splice(index, 1);
         }
       }
-      guardarEstadoSistema();
-      mostrarToast(`✅ ${seleccionados.length} elementos eliminados permanentemente.`, "info");
+      mostrarToast(`✅ ${seleccionados.length} elementos eliminados permanentemente de la nube.`, "info");
       renderTablaPapelera();
     });
   });
 }
 
-function vaciarPapelera() {
+async function vaciarPapelera() {
   verificarPermisoAdmin(async () => {
     if (papeleraMovimientos.length === 0) {
       mostrarToast("La papelera ya está vacía.", "info");
       return;
     }
 
-    solicitarConfirmacion("⚠️ ¿Está seguro de que desea vaciar permanentemente toda la papelera? Esta acción no se puede deshacer.", async () => {
+    solicitarConfirmacion("⚠️ ¿Está seguro de que desea vaciar permanentemente toda la papelera en Firestore? Esta acción no se puede deshacer.", async () => {
       try {
-        if (typeof db !== "undefined" && db) {
-          const snapshot = await db.collection("iapci_papelera").get();
-          const batch = db.batch();
-          snapshot.forEach(doc => batch.delete(doc.ref));
+        if (db) {
+          const snapshot = await getDocs(collection(db, "iapci_papelera"));
+          const batch = writeBatch(db);
+          snapshot.forEach(docSnap => batch.delete(docSnap.ref));
           await batch.commit();
         }
       } catch (error) {
@@ -1445,9 +1462,8 @@ function vaciarPapelera() {
       }
 
       papeleraMovimientos = [];
-      guardarEstadoSistema();
       renderTablaPapelera();
-      mostrarToast("✅ Papelera vaciada con éxito.", "success");
+      mostrarToast("✅ Papelera vaciada con éxito en la base de datos.", "success");
     });
   });
 }
