@@ -222,7 +222,7 @@ function inicializarMapaEstados() {
     const stockMinVal = prod.stockMin !== undefined ? prod.stockMin : 100;
     let estado = "Buen Nivel";
     if (stockActual <= 0) estado = "Agotado";
-    else if (stockActual <= stockMinVal) estado = "Bajo Nivel";
+    else if (stockActual < stockMinVal) estado = "Bajo Nivel";
     estadosAnterioresInventario[prod.codigo.toUpperCase()] = estado;
   });
 }
@@ -537,7 +537,7 @@ function detectarYNotificarCambiosDeEstatus() {
     let estadoActual = "Buen Nivel";
     if (stockActual <= 0) {
       estadoActual = "Agotado";
-    } else if (stockActual <= stockMinVal) {
+    } else if (stockActual < stockMinVal) {
       estadoActual = "Bajo Nivel";
     }
 
@@ -578,8 +578,8 @@ function renderTablaStock(codigoResaltar = null) {
     const valorDisponibleBs = stockActual * prod.precioBs;
     
     const stockMinVal = prod.stockMin !== undefined ? prod.stockMin : 100;
-    const estado = stockActual > stockMinVal ? "Buen Nivel" : (stockActual > 0 ? "Bajo Nivel" : "Agotado");
-    const claseBadge = stockActual > stockMinVal ? "badge-buen" : (stockActual > 0 ? "badge-bajo" : "badge-agotado");
+    const estado = stockActual >= stockMinVal ? "Buen Nivel" : (stockActual > 0 ? "Bajo Nivel" : "Agotado");
+    const claseBadge = stockActual >= stockMinVal ? "badge-buen" : (stockActual > 0 ? "badge-bajo" : "badge-agotado");
 
     totalInic += prod.stockInic;
     totalEntradas += prod.entradas;
@@ -1188,7 +1188,7 @@ function renderReporteGeneral() {
     stockDisponible += stockAct;
     totalSalidas += prod.salidas;
 
-    if (stockAct > minStockVal) {
+    if (stockAct >= minStockVal) {
       buenNivel++;
     } else if (stockAct > 0) {
       bajoNivel++;
@@ -1205,7 +1205,7 @@ function renderReporteGeneral() {
 
     if (stockAct <= 0) {
       categoriasMap[catNombre].tieneAgotado = true;
-    } else if (stockAct <= minStockVal) {
+    } else if (stockAct < minStockVal) {
       categoriasMap[catNombre].tieneBajoNivel = true;
     }
   });
