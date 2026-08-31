@@ -36,8 +36,8 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app); // 👈 Inicializa la base de datos globalmente
 // ==========================================
-// CEREBRO UNIFICADO DEL SISTEMA - IAPCI 2026
-// (Sincronización Firestore en Tiempo Real + Respaldo Local + Sesión Única)
+// CEREBRO UNIFICADO DEL SISTEMA - IAPCI 2026[cite: 11]
+// (Sincronización Firestore en Tiempo Real + Respaldo Local + Sesión Única)[cite: 11]
 // ==========================================
 
 // --- 0. FUNCIÓN DE IMPRESIÓN DE REPORTE GENERAL ---
@@ -195,25 +195,7 @@ async function cargarDatosRemotos() {
 
 window.addEventListener("DOMContentLoaded", async () => {
   await cargarDatosRemotos();
-
-  const usuarioGuardado = localStorage.getItem("iapci_usuario_activo_nombre");
-  if (usuarioGuardado && usuarios[usuarioGuardado]) {
-    usuarioActual = usuarios[usuarioGuardado];
-    document.getElementById("pantalla-login")?.classList.add("oculto");
-    document.getElementById("pantalla-sistema")?.classList.remove("oculto");
-    document.getElementById("rol-usuario-lbl").textContent = `Usuario: ${usuarioGuardado.toUpperCase()} (${usuarioActual.rol})`;
-    document.getElementById("f-fecha").value = new Date().toLocaleDateString();
-    
-    const inputTasaElem = document.getElementById("f-tasa-cambio");
-    if (inputTasaElem) inputTasaElem.value = tasaCambioBCV;
-
-    const lblTasa = document.getElementById("lbl-tasa-actual");
-    if (lblTasa) lblTasa.textContent = `Bs. ${tasaCambioBCV.toFixed(2)} / $`;
-
-    inicializarMapaEstados();
-    aplicarPermisos();
-    actualizarTodo();
-  }
+  // Se ha removido la validación de localStorage para que la sesión no se mantenga activa al refrescar.[cite: 11]
 });
 
 // --- 4. GESTIÓN DE USUARIOS CON CTRL + K ---
