@@ -798,32 +798,37 @@ async function modificarStockFila(index) {
 }
 
 function validarYProcesarRegistro() {
-  var hoja = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("interfaz de registro");
-  var celdasAValidar = ["B3", "B5", "B7", "B9"];
-  var camposVacios = [];
+  const idsAValidar = ["f-codigo", "f-producto", "f-precio", "f-cantidad"];
+  let camposVacios = [];
   
-  celdasAValidar.forEach(function(celdaID) {
-    hoja.getRange(celdaID).setBackground("#ffffff");
+  // Limpiar estilos de error previos
+  idsAValidar.forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.style.borderColor = "";
+      el.style.backgroundColor = "";
+    }
   });
   
-  celdasAValidar.forEach(function(celdaID) {
-    var valor = hoja.getRange(celdaID).getValue();
-    if (valor === "" || valor === null) {
-      camposVacios.push(celdaID);
-      hoja.getRange(celdaID).setBackground("#f4cccc");
+  // Validar campos vacíos en el DOM
+  idsAValidar.forEach(function(id) {
+    const el = document.getElementById(id);
+    const valor = el ? el.value.trim() : "";
+    if (!valor) {
+      camposVacios.push(id);
+      if (el) {
+        el.style.borderColor = "#c0392b";
+        el.style.backgroundColor = "#fadbd8";
+      }
     }
   });
   
   if (camposVacios.length > 0) {
-    SpreadsheetApp.getUi().alert(
-      "Atención", 
-      "Debe ser llenada toda la información del producto antes de proceder. Los campos faltantes han sido resaltados.", 
-      SpreadsheetApp.getUi().Button.OK
-    );
+    mostrarToast("⚠️ Atención: Debe ser llenada toda la información del producto antes de proceder. Los campos faltantes han sido resaltados.", "warning");
     return false;
   }
   
-  SpreadsheetApp.getUi().alert("¡Registro exitoso!");
+  mostrarToast("✅ ¡Registro y validación exitosos!", "success");
   return true;
 }
 
