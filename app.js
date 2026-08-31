@@ -195,8 +195,10 @@ async function cargarDatosDesdeFirebase() {
       usuarioActual = usuarios[usuarioGuardado];
       document.getElementById("pantalla-login")?.classList.add("oculto");
       document.getElementById("pantalla-sistema")?.classList.remove("oculto");
-      document.getElementById("rol-usuario-lbl").textContent = `Usuario: ${usuarioGuardado.toUpperCase()} (${usuarioActual.rol})`;
-      document.getElementById("f-fecha").value = new Date().toLocaleDateString();
+      const rolLbl = document.getElementById("rol-usuario-lbl");
+      if (rolLbl) rolLbl.textContent = `Usuario: ${usuarioGuardado.toUpperCase()} (${usuarioActual.rol})`;
+      const fFecha = document.getElementById("f-fecha");
+      if (fFecha) fFecha.value = new Date().toLocaleDateString();
       
       const inputTasaElem = document.getElementById("f-tasa-cambio");
       if (inputTasaElem) inputTasaElem.value = tasaCambioBCV;
@@ -238,26 +240,41 @@ function toggleModalUsuarios() {
       const adminKey = Object.keys(usuarios).find(u => usuarios[u].rol === "Administrador") || "admin";
       const asistenteKey = Object.keys(usuarios).find(u => usuarios[u].rol === "Asistente") || "asistente";
 
-      document.getElementById("cfg-user-soporte").value = soporteKey;
-      document.getElementById("cfg-user-admin").value = adminKey;
-      document.getElementById("cfg-user-asistente").value = asistenteKey;
+      const cfgSoporte = document.getElementById("cfg-user-soporte");
+      const cfgAdmin = document.getElementById("cfg-user-admin");
+      const cfgAsistente = document.getElementById("cfg-user-asistente");
+
+      if (cfgSoporte) cfgSoporte.value = soporteKey;
+      if (cfgAdmin) cfgAdmin.value = adminKey;
+      if (cfgAsistente) cfgAsistente.value = asistenteKey;
       
-      document.getElementById("cfg-pass-soporte").value = "";
-      document.getElementById("cfg-pass-admin").value = "";
-      document.getElementById("cfg-pass-asistente").value = "";
+      const passSoporte = document.getElementById("cfg-pass-soporte");
+      const passAdmin = document.getElementById("cfg-pass-admin");
+      const passAsistente = document.getElementById("cfg-pass-asistente");
+
+      if (passSoporte) passSoporte.value = "";
+      if (passAdmin) passAdmin.value = "";
+      if (passAsistente) passAsistente.value = "";
     }
   }
 }
 
 async function guardarNuevosUsuarios() {
-  const sUser = document.getElementById("cfg-user-soporte").value.trim().toLowerCase();
-  const sPass = document.getElementById("cfg-pass-soporte").value;
+  const sUserElem = document.getElementById("cfg-user-soporte");
+  const sPassElem = document.getElementById("cfg-pass-soporte");
+  const aUserElem = document.getElementById("cfg-user-admin");
+  const aPassElem = document.getElementById("cfg-pass-admin");
+  const asUserElem = document.getElementById("cfg-user-asistente");
+  const asPassElem = document.getElementById("cfg-pass-asistente");
 
-  const aUser = document.getElementById("cfg-user-admin").value.trim().toLowerCase();
-  const aPass = document.getElementById("cfg-pass-admin").value;
+  const sUser = sUserElem ? sUserElem.value.trim().toLowerCase() : "";
+  const sPass = sPassElem ? sPassElem.value : "";
 
-  const asUser = document.getElementById("cfg-user-asistente").value.trim().toLowerCase();
-  const asPass = document.getElementById("cfg-pass-asistente").value;
+  const aUser = aUserElem ? aUserElem.value.trim().toLowerCase() : "";
+  const aPass = aPassElem ? aPassElem.value : "";
+
+  const asUser = asUserElem ? asUserElem.value.trim().toLowerCase() : "";
+  const asPass = asPassElem ? asPassElem.value : "";
 
   if (!sUser || !aUser || !asUser) {
     mostrarToast("Los nombres de usuario no pueden estar vacíos.", "warning");
@@ -303,9 +320,12 @@ window.addEventListener("keydown", function(e) {
 });
 
 function iniciarSesion() {
-  const userInput = document.getElementById("input-usuario").value.trim().toLowerCase();
-  const passInput = document.getElementById("input-clave").value;
+  const inputUsuario = document.getElementById("input-usuario");
+  const inputClave = document.getElementById("input-clave");
   const msgError = document.getElementById("mensaje-error");
+
+  const userInput = inputUsuario ? inputUsuario.value.trim().toLowerCase() : "";
+  const passInput = inputClave ? inputClave.value : "";
 
   if (usuarios[userInput] && usuarios[userInput].clave === passInput) {
     const rolIntentado = usuarios[userInput].rol;
@@ -316,7 +336,7 @@ function iniciarSesion() {
       try {
         const sesionData = JSON.parse(sesionExistenteStr);
         if (Date.now() - sesionData.timestamp < 8000) {
-          msgError.textContent = `❌ Acceso denegado: El rol "${rolIntentado}" ya se encuentra activo en otra ventana/computadora.`;
+          if (msgError) msgError.textContent = `❌ Acceso denegado: El rol "${rolIntentado}" ya se encuentra activo en otra ventana/computadora.`;
           return;
         }
       } catch (e) {
@@ -328,7 +348,11 @@ function iniciarSesion() {
     sessionStorage.setItem(claveSesionKey, JSON.stringify({ tabId: idSesionUnicaTab, timestamp: Date.now() }));
     sessionStorage.setItem("iapci_usuario_activo_nombre", userInput);
 
-    canalSincronizacion.postMessage({ tipo: "FORZAR_CIERRE_SESION", rol: rolIntentado });
+    try {
+      canalSincronizacion.postMessage({ tipo: "FORZAR_CIERRE_SESION", rol: rolIntentado });
+    } catch (e) {
+      console.error(e);
+    }
 
     if (intervaloHeartbeat) clearInterval(intervaloHeartbeat);
     intervaloHeartbeat = setInterval(() => {
@@ -337,10 +361,12 @@ function iniciarSesion() {
       }
     }, 4000);
 
-    document.getElementById("pantalla-login").classList.add("oculto");
-    document.getElementById("pantalla-sistema").classList.remove("oculto");
-    document.getElementById("rol-usuario-lbl").textContent = `Usuario: ${userInput.toUpperCase()} (${usuarioActual.rol})`;
-    document.getElementById("f-fecha").value = new Date().toLocaleDateString();
+    document.getElementById("pantalla-login")?.classList.add("oculto");
+    document.getElementById("pantalla-sistema")?.classList.remove("oculto");
+    const rolLbl = document.getElementById("rol-usuario-lbl");
+    if (rolLbl) rolLbl.textContent = `Usuario: ${userInput.toUpperCase()} (${usuarioActual.rol})`;
+    const fFecha = document.getElementById("f-fecha");
+    if (fFecha) fFecha.value = new Date().toLocaleDateString();
     
     const inputTasaElem = document.getElementById("f-tasa-cambio");
     if (inputTasaElem) inputTasaElem.value = tasaCambioBCV;
@@ -350,9 +376,9 @@ function iniciarSesion() {
 
     aplicarPermisos();
     actualizarTodo();
-    msgError.textContent = "";
+    if (msgError) msgError.textContent = "";
   } else {
-    msgError.textContent = "Usuario o clave incorrectos";
+    if (msgError) msgError.textContent = "Usuario o clave incorrectos";
   }
 }
 
@@ -439,11 +465,12 @@ function cambiarPestana(pestana) {
 
 async function actualizarTasa() {
   verificarPermisoAdmin(async () => {
-    const inputTasa = parseFloat(document.getElementById("f-tasa-cambio").value);
+    const inputTasaElem = document.getElementById("f-tasa-cambio");
+    const inputTasa = inputTasaElem ? parseFloat(inputTasaElem.value) : NaN;
     
     if (isNaN(inputTasa) || inputTasa <= 0) {
       mostrarToast("❌ Por favor introduzca una tasa de cambio válida.", "warning");
-      document.getElementById("f-tasa-cambio").value = tasaCambioBCV;
+      if (inputTasaElem) inputTasaElem.value = tasaCambioBCV;
       return;
     }
 
@@ -481,8 +508,10 @@ function cerrarSesion() {
   usuarioActual = null;
   document.getElementById("pantalla-sistema")?.classList.add("oculto");
   document.getElementById("pantalla-login")?.classList.remove("oculto");
-  document.getElementById("input-usuario").value = "";
-  document.getElementById("input-clave").value = "";
+  const inputUsuario = document.getElementById("input-usuario");
+  const inputClave = document.getElementById("input-clave");
+  if (inputUsuario) inputUsuario.value = "";
+  if (inputClave) inputClave.value = "";
 }
 
 function actualizarTodo(codigoResaltar = null, indiceHistorialResaltar = null) {
@@ -548,8 +577,9 @@ function renderTablaStock(codigoResaltar = null) {
     const stockActual = prod.stockInic + prod.entradas - prod.salidas;
     const valorDisponibleBs = stockActual * prod.precioBs;
     
-    const estado = stockActual > (prod.stockMin !== undefined ? prod.stockMin : 12) ? "Buen Nivel" : (stockActual > 0 ? "Bajo Nivel" : "Agotado");
-    const claseBadge = stockActual > (prod.stockMin !== undefined ? prod.stockMin : 12) ? "badge-buen" : (stockActual > 0 ? "badge-bajo" : "badge-agotado");
+    const stockMinVal = prod.stockMin !== undefined ? prod.stockMin : 12;
+    const estado = stockActual > stockMinVal ? "Buen Nivel" : (stockActual > 0 ? "Bajo Nivel" : "Agotado");
+    const claseBadge = stockActual > stockMinVal ? "badge-buen" : (stockActual > 0 ? "badge-bajo" : "badge-agotado");
 
     totalInic += prod.stockInic;
     totalEntradas += prod.entradas;
@@ -578,7 +608,7 @@ function renderTablaStock(codigoResaltar = null) {
       <td>${prod.salidas}</td>
       <td><strong>${stockActual}</strong></td>
       <td>Bs.S ${valorDisponibleBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</td>
-      <td>${prod.stockMin !== undefined ? prod.stockMin : 12}</td>
+      <td>${stockMinVal}</td>
       <td><span class="${claseBadge}">${estado}</span></td>
       <td>${prod.obs || '-'}</td>
       <td><button onclick="modificarStockFila(${index})" style="background:#007bff; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">Editar</button></td>
@@ -755,15 +785,25 @@ async function modificarStockFila(index) {
 
 async function nuevoProducto() {
   verificarPermisoAdmin(async () => {
-    const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
-    const descripcion = document.getElementById("f-producto").value.trim().toUpperCase();
-    const categoria = document.getElementById("f-categoria").value.trim() || "General";
-    const pasillo = parseInt(document.getElementById("f-pasillo").value) || 0;
-    const und = document.getElementById("f-und").value.trim() || "UND";
-    const precioBs = parseFloat(document.getElementById("f-precio").value) || 0;
-    const cantInic = parseInt(document.getElementById("f-cantidad").value) || 0;
-    const stockMinInput = parseInt(document.getElementById("f-stock-min")?.value) || 12;
-    const obs = document.getElementById("f-observacion").value.trim() || `Nuevo producto ${new Date().toLocaleDateString()}`;
+    const fCodigo = document.getElementById("f-codigo");
+    const fProducto = document.getElementById("f-producto");
+    const fCategoria = document.getElementById("f-categoria");
+    const fPasillo = document.getElementById("f-pasillo");
+    const fUnd = document.getElementById("f-und");
+    const fPrecio = document.getElementById("f-precio");
+    const fCantidad = document.getElementById("f-cantidad");
+    const fStockMin = document.getElementById("f-stock-min");
+    const fObservacion = document.getElementById("f-observacion");
+
+    const codigo = fCodigo ? fCodigo.value.trim().toUpperCase() : "";
+    const descripcion = fProducto ? fProducto.value.trim().toUpperCase() : "";
+    const categoria = fCategoria ? fCategoria.value.trim() : "General";
+    const pasillo = fPasillo ? parseInt(fPasillo.value) || 0 : 0;
+    const und = fUnd ? fUnd.value.trim() || "UND" : "UND";
+    const precioBs = fPrecio ? parseFloat(fPrecio.value) || 0 : 0;
+    const cantInic = fCantidad ? parseInt(fCantidad.value) || 0 : 0;
+    const stockMinInput = fStockMin ? parseInt(fStockMin.value) || 12 : 12;
+    const obs = fObservacion ? fObservacion.value.trim() || `Nuevo producto ${new Date().toLocaleDateString()}` : "";
 
     if (!codigo || !descripcion) {
       mostrarToast("Por favor introduce el Código y la Descripción antes de crear el nuevo producto.", "warning");
@@ -802,7 +842,8 @@ async function nuevoProducto() {
 }
 
 function buscarCodigo() {
-  const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
+  const fCodigo = document.getElementById("f-codigo");
+  const codigo = fCodigo ? fCodigo.value.trim().toUpperCase() : "";
   if (!codigo) {
     mostrarToast("Escribe un Código de producto en el campo para buscar.", "warning");
     return;
@@ -810,18 +851,27 @@ function buscarCodigo() {
 
   const prod = inventario.find(p => p.codigo.toUpperCase() === codigo);
   if (prod) {
-    document.getElementById("f-codigo").value = prod.codigo;
-    document.getElementById("f-producto").value = prod.descripcion;
-    document.getElementById("f-categoria").value = prod.categoria;
-    document.getElementById("f-pasillo").value = prod.pasillo;
-    document.getElementById("f-und").value = prod.und;
-    if (document.getElementById("f-stock-min")) {
-      document.getElementById("f-stock-min").value = prod.stockMin !== undefined ? prod.stockMin : 12;
+    if (fCodigo) fCodigo.value = prod.codigo;
+    const fProducto = document.getElementById("f-producto");
+    const fCategoria = document.getElementById("f-categoria");
+    const fPasillo = document.getElementById("f-pasillo");
+    const fUnd = document.getElementById("f-und");
+    const fStockMin = document.getElementById("f-stock-min");
+    const fPrecio = document.getElementById("f-precio");
+    const fCantidad = document.getElementById("f-cantidad");
+    const fObservacion = document.getElementById("f-observacion");
+
+    if (fProducto) fProducto.value = prod.descripcion;
+    if (fCategoria) fCategoria.value = prod.categoria;
+    if (fPasillo) fPasillo.value = prod.pasillo;
+    if (fUnd) fUnd.value = prod.und;
+    if (fStockMin) {
+      fStockMin.value = prod.stockMin !== undefined ? prod.stockMin : 12;
     }
     
-    document.getElementById("f-precio").value = "";
-    document.getElementById("f-cantidad").value = "";
-    document.getElementById("f-observacion").value = "";
+    if (fPrecio) fPrecio.value = "";
+    if (fCantidad) fCantidad.value = "";
+    if (fObservacion) fObservacion.value = "";
     
     cambiarPestana('stock');
     renderTablaStock(prod.codigo);
@@ -831,10 +881,15 @@ function buscarCodigo() {
 }
 
 async function registrarEntrada() {
-  const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
-  const cant = parseInt(document.getElementById("f-cantidad").value) || 0;
-  const precioNuevo = parseFloat(document.getElementById("f-precio").value) || 0;
-  const obs = document.getElementById("f-observacion").value.trim() || "REPOSICIÓN";
+  const fCodigo = document.getElementById("f-codigo");
+  const fCantidad = document.getElementById("f-cantidad");
+  const fPrecio = document.getElementById("f-precio");
+  const fObservacion = document.getElementById("f-observacion");
+
+  const codigo = fCodigo ? fCodigo.value.trim().toUpperCase() : "";
+  const cant = fCantidad ? parseInt(fCantidad.value) || 0 : 0;
+  const precioNuevo = fPrecio ? parseFloat(fPrecio.value) || 0 : 0;
+  const obs = fObservacion ? fObservacion.value.trim() || "REPOSICIÓN" : "REPOSICIÓN";
   const prod = inventario.find(p => p.codigo.toUpperCase() === codigo);
 
   if (prod && cant > 0) {
@@ -882,11 +937,15 @@ async function registrarEntrada() {
 }
 
 async function registrarSalida() {
-  const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
+  const fCodigo = document.getElementById("f-codigo");
   const cantInputElem = document.getElementById("f-cantidad");
-  const cant = parseInt(cantInputElem?.value) || 0;
-  const precio = parseFloat(document.getElementById("f-precio").value) || 0;
-  const obs = document.getElementById("f-observacion").value.trim() || "VENTA";
+  const fPrecio = document.getElementById("f-precio");
+  const fObservacion = document.getElementById("f-observacion");
+
+  const codigo = fCodigo ? fCodigo.value.trim().toUpperCase() : "";
+  const cant = cantInputElem ? parseInt(cantInputElem.value) || 0 : 0;
+  const precio = fPrecio ? parseFloat(fPrecio.value) || 0 : 0;
+  const obs = fObservacion ? fObservacion.value.trim() || "VENTA" : "VENTA";
   const prod = inventario.find(p => p.codigo.toUpperCase() === codigo);
 
   if (!prod) {
@@ -1097,15 +1156,25 @@ async function eliminarRegistro() {
 }
 
 function limpiarFormulario() {
-  document.getElementById("f-codigo").value = "";
-  document.getElementById("f-producto").value = "";
-  document.getElementById("f-categoria").value = "";
-  document.getElementById("f-pasillo").value = "";
-  document.getElementById("f-und").value = "";
-  document.getElementById("f-precio").value = "";
-  document.getElementById("f-cantidad").value = "";
-  document.getElementById("f-stock-min").value = "12";
-  document.getElementById("f-observacion").value = "";
+  const fCodigo = document.getElementById("f-codigo");
+  const fProducto = document.getElementById("f-producto");
+  const fCategoria = document.getElementById("f-categoria");
+  const fPasillo = document.getElementById("f-pasillo");
+  const fUnd = document.getElementById("f-und");
+  const fPrecio = document.getElementById("f-precio");
+  const fCantidad = document.getElementById("f-cantidad");
+  const fStockMin = document.getElementById("f-stock-min");
+  const fObservacion = document.getElementById("f-observacion");
+
+  if (fCodigo) fCodigo.value = "";
+  if (fProducto) fProducto.value = "";
+  if (fCategoria) fCategoria.value = "";
+  if (fPasillo) fPasillo.value = "";
+  if (fUnd) fUnd.value = "";
+  if (fPrecio) fPrecio.value = "";
+  if (fCantidad) fCantidad.value = "";
+  if (fStockMin) fStockMin.value = "12";
+  if (fObservacion) fObservacion.value = "";
 }
 
 function renderReporteGeneral() {
@@ -1467,3 +1536,24 @@ async function vaciarPapelera() {
     });
   });
 }
+
+// Exponer funciones globales para que funcionen con los atributos `onclick` del HTML en módulos ES
+window.iniciarSesion = iniciarSesion;
+window.cerrarSesion = cerrarSesion;
+window.cambiarPestana = cambiarPestana;
+window.actualizarTasa = actualizarTasa;
+window.toggleModalUsuarios = toggleModalUsuarios;
+window.guardarNuevosUsuarios = guardarNuevosUsuarios;
+window.modificarStockFila = modificarStockFila;
+window.nuevoProducto = nuevoProducto;
+window.buscarCodigo = buscarCodigo;
+window.registrarEntrada = registrarEntrada;
+window.registrarSalida = registrarSalida;
+window.eliminarRegistro = eliminarRegistro;
+window.toggleModalPapelera = toggleModalPapelera;
+window.renderTablaPapelera = renderTablaPapelera;
+window.seleccionarTodosPapelera = seleccionarTodosPapelera;
+window.restaurarRegistroPapelera = restaurarRegistroPapelera;
+window.eliminarSeleccionadosPapelera = eliminarSeleccionadosPapelera;
+window.vaciarPapelera = vaciarPapelera;
+window.imprimirReporte = imprimirReporte;
