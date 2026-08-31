@@ -783,6 +783,46 @@ async function modificarStockFila(index) {
   };
 }
 
+// Función añadida: Validación de campos obligatorios en la interfaz de registro[cite: 8]
+function validarYProcesarRegistro() {
+  // 1. Definir la hoja y los rangos o IDs de los campos de la interfaz
+  var hoja = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("interfaz de registro");
+  
+  // Ejemplo de campos obligatorios (ajusta las celdas según tu diseño)
+  var celdasAValidar = ["B3", "B5", "B7", "B9"]; // Reemplaza con tus celdas reales
+  var camposVacios = [];
+  
+  // 2. Limpiar formatos anteriores (quitar resaltado)
+  celdasAValidar.forEach(function(celdaID) {
+    hoja.getRange(celdaID).setBackground("#ffffff"); // Fondo blanco por defecto
+  });
+  
+  // 3. Comprobar cuáles campos están vacíos
+  celdasAValidar.forEach(function(celdaID) {
+    var valor = hoja.getRange(celdaID).getValue();
+    if (valor === "" || valor === null) {
+      camposVacios.push(celdaID);
+      // Resaltar el campo vacío con un color rojo claro
+      hoja.getRange(celdaID).setBackground("#f4cccc");
+    }
+  });
+  
+  // 4. Si hay campos vacíos, detener y avisar; de lo contrario, continuar
+  if (camposVacios.length > 0) {
+    SpreadsheetApp.getUi().alert(
+      "Atención", 
+      "Debe ser llenada toda la información del producto antes de proceder. Los campos faltantes han sido resaltados.", 
+      SpreadsheetApp.getUi().Button.OK
+    );
+    return false; // Detiene la ejecución de la función principal
+  }
+  
+  // 5. Continuar con la lógica del botón si todo está lleno
+  // (Inserta aquí el código que ejecutan tus botones normalmente)
+  SpreadsheetApp.getUi().alert("¡Registro exitoso!");
+  return true;
+}
+
 // Botón: Nuevo Producto - Crea y registra un nuevo producto en el inventario y en el historial de movimientos
 function nuevoProducto() {
   verificarPermisoAdmin(async () => {
@@ -1523,3 +1563,4 @@ window.restaurarRegistroPapelera = restaurarRegistroPapelera;
 window.eliminarSeleccionadosPapelera = eliminarSeleccionadosPapelera;
 window.vaciarPapelera = vaciarPapelera;
 window.imprimirReporte = imprimirReporte;
+window.validarYProcesarRegistro = validarYProcesarRegistro;
