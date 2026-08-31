@@ -1125,13 +1125,13 @@ function eliminarRegistro() {
           let eliminarProductoCompleto = false;
 
           if (prod) {
-            const cantEntrada = movEliminado.entrada || 0;
-            const cantSalida = movEliminado.salida || 0;
-
-            // Si el producto fue creado por este registro y no tiene movimientos posteriores (entradas/salidas adicionales)
-            if (prod.entradas === 0 && prod.salidas === 0 && prod.stockInic === cantEntrada) {
+            const cantEntrada = Number(movEliminado.entrada || movEliminado.cantidad || 0);
+            
+            // Si el movimiento actual registró la entrada inicial y el stock actual coincide o no tiene otros movimientos
+            if ((prod.entradas === cantEntrada && prod.salidas === 0) || (prod.stockInic === cantEntrada && prod.entradas === 0 && prod.salidas === 0)) {
               eliminarProductoCompleto = true;
             } else {
+              const cantSalida = Number(movEliminado.salida || 0);
               if (cantEntrada > 0) {
                 prod.entradas = Math.max(0, prod.entradas - cantEntrada);
               }
@@ -1149,7 +1149,6 @@ function eliminarRegistro() {
           }
 
           if (eliminarProductoCompleto && prodIndex !== -1) {
-            // Eliminar completamente de la lista de inventario local y de Firestore
             const idDocStock = inventario[prodIndex].idDoc;
             inventario.splice(prodIndex, 1);
 
