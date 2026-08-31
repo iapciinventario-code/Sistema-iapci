@@ -11,7 +11,7 @@ async function guardarDatosUsuario(datos) {
         localStorage.setItem("iapci_usuarios", JSON.stringify(locales));
     }
 }
-``[cite: 10]
+
 // --- CONFIGURACIÓN DE FIREBASE ---
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "[https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js](https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js)";
