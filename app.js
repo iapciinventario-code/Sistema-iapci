@@ -1047,16 +1047,18 @@ function renderTablaHistorial(indiceResaltar = null) {
   if (!tbody) return;
   tbody.innerHTML = "";
 
-  let sumaEntradas = 0, sumaSalidas = 0, sumaMontoTotal = 0;
+  let sumaEntradas = 0, sumaSalidas = 0, sumaMontoTotalBs = 0, sumaMontoTotalUsd = 0;
 
   historialMovimientos.forEach((mov, index) => {
     const cantMov = mov.entrada > 0 ? mov.entrada : mov.salida;
-    const precioTotal = cantMov * mov.precio;
+    const precioTotalBs = cantMov * mov.precio;
     const precioUsd = mov.precio / tasaCambioBCV;
+    const precioTotalUsd = cantMov * precioUsd;
     
     sumaEntradas += mov.entrada;
     sumaSalidas += mov.salida;
-    sumaMontoTotal += precioTotal;
+    sumaMontoTotalBs += precioTotalBs;
+    sumaMontoTotalUsd += precioTotalUsd;
 
     const tr = document.createElement("tr");
     tr.id = `fila-historial-${index}`;
@@ -1078,7 +1080,7 @@ function renderTablaHistorial(indiceResaltar = null) {
       <td>$ ${precioUsd.toFixed(2)}</td>
       <td>${mov.entrada > 0 ? mov.entrada : ''}</td>
       <td>${mov.salida > 0 ? mov.salida : ''}</td>
-      <td>Bs.S ${precioTotal.toFixed(2)}</td>
+      <td>Bs.S ${precioTotalBs.toFixed(2)}</td>
       <td>${mov.observacion}</td>
     `;
     tbody.appendChild(tr);
@@ -1086,7 +1088,8 @@ function renderTablaHistorial(indiceResaltar = null) {
 
   if (document.getElementById("tot-entradas")) document.getElementById("tot-entradas").textContent = sumaEntradas;
   if (document.getElementById("tot-salidas")) document.getElementById("tot-salidas").textContent = sumaSalidas;
-  if (document.getElementById("tot-monto-total")) document.getElementById("tot-monto-total").textContent = `Bs.S ${sumaMontoTotal.toFixed(2)}`;
+  if (document.getElementById("tot-monto-total")) document.getElementById("tot-monto-total").textContent = `Bs.S ${sumaMontoTotalBs.toFixed(2)}`;
+  if (document.getElementById("tot-monto-total-usd")) document.getElementById("tot-monto-total-usd").textContent = `$ ${sumaMontoTotalUsd.toFixed(2)}`;
 
   if (indiceResaltar !== null) {
     const filaEncontrada = document.getElementById(`fila-historial-${indiceResaltar}`);
