@@ -1081,7 +1081,7 @@ function renderTablaHistorial(indiceResaltar = null) {
   }
 }
 
-async function eliminarRegistro() {
+function eliminarRegistro() {
   verificarPermisoAdmin(async () => {
     try {
       if (!historialMovimientos || historialMovimientos.length === 0) {
@@ -1094,7 +1094,7 @@ async function eliminarRegistro() {
         return;
       }
 
-      solicitarConfirmacion("¿Desea eliminar el último movimiento registrado, ajustar su cantidad correspondiente en el estatus y stock, y enviar el registro a la papelera en Firestore?", async () => {
+      solicitarConfirmacion("¿Desea eliminar el último movimiento registrado de la pestaña de entradas/salidas, ajustar su cantidad correspondiente en el estatus y stock, y enviar el registro a la papelera?", async () => {
         try {
           const movEliminado = historialMovimientos.shift();
           if (!movEliminado) return;
@@ -1114,7 +1114,7 @@ async function eliminarRegistro() {
               prod.salidas = Math.max(0, prod.salidas - cantSalida);
             }
 
-            if (db && prod.idDoc) {
+            if (typeof db !== "undefined" && db && prod.idDoc) {
               await updateDoc(doc(db, "iapci_stock", prod.idDoc), {
                 entradas: prod.entradas,
                 salidas: prod.salidas
@@ -1130,7 +1130,7 @@ async function eliminarRegistro() {
 
           papeleraMovimientos.unshift(movLimpioParaPapelera);
 
-          if (db) {
+          if (typeof db !== "undefined" && db) {
             try {
               if (idDocHistorial) {
                 await deleteDoc(doc(db, "iapci_historial", idDocHistorial));
@@ -1143,7 +1143,7 @@ async function eliminarRegistro() {
           }
 
           actualizarTodo(prod ? prod.codigo : null);
-          mostrarToast("🗑 El último registro ha sido eliminado, su stock fue ajustado correctamente y se envió a la papelera en la nube.", "success");
+          mostrarToast("🗑 El último registro de entrada/salida ha sido eliminado de la pestaña de registro, su stock fue ajustado correctamente y se envió a la papelera.", "success");
         } catch (err) {
           console.error("Error al eliminar registro:", err);
           mostrarToast("❌ Ocurrió un error al procesar la eliminación.", "error");
