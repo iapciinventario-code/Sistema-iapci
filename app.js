@@ -851,7 +851,7 @@ function nuevoProducto() {
     }
 
     const nuevoProdObj = {
-      codigo, descripcion, categoria, pasillo, und, precioBs, stockInic: cantInic, entradas: 0, salidas: 0, stockMin: stockMinInput, obs, creadoConNuevoProducto: true
+      codigo, descripcion, categoria, pasillo, und, precioBs, stockInic: cantInic, entradas: 0, salidas: 0, stockMin: stockMinInput, obs
     };
 
     const nuevoHistObj = {
@@ -1099,7 +1099,7 @@ function renderTablaHistorial(indiceResaltar = null) {
   }
 }
 
-async function eliminarRegistro() {
+function eliminarRegistro() {
   verificarPermisoAdmin(async () => {
     try {
       if (!historialMovimientos || historialMovimientos.length === 0) {
@@ -1112,7 +1112,7 @@ async function eliminarRegistro() {
         return;
       }
 
-      solicitarConfirmacion("¿Desea eliminar el último movimiento registrado de la pestaña de entradas/salidas, ajustar su cantidad correspondiente en el estatus y stock, y enviar el registro a la papelera?", async () => {
+      solicitarConfirmacion("¿Desea eliminar el último movimiento registrado, ajustar el inventario y enviar el registro a la papelera?", async () => {
         try {
           const movEliminado = historialMovimientos.shift();
           if (!movEliminado) return;
@@ -1120,29 +1120,25 @@ async function eliminarRegistro() {
           const idDocHistorial = movEliminado.idDoc;
           const codigoMov = (movEliminado.codigo || "").toUpperCase();
           const prodIndex = inventario.findIndex(p => (p.codigo || "").toUpperCase() === codigoMov);
+          const prod = prodIndex !== -1 ? inventario[prodIndex] : null;
 
-          if (prodIndex !== -1) {
-            const prod = inventario[prodIndex];
+          let eliminarProductoCompleto = false;
+
+          if (prod) {
             const cantEntrada = movEliminado.entrada || 0;
             const cantSalida = movEliminado.salida || 0;
 
-            if (cantEntrada > 0) {
-              prod.entradas = Math.max(0, prod.entradas - cantEntrada);
-            }
-            if (cantSalida > 0) {
-              prod.salidas = Math.max(0, prod.salidas - cantSalida);
-            }
-
-            const stockActualResultante = prod.stockInic + prod.entradas - prod.salidas;
-
-            // Condición: Stock en 0 y originado previamente mediante el botón "Nuevo Producto"
-            if (stockActualResultante <= 0 && prod.creadoConNuevoProducto === true) {
-              if (typeof db !== "undefined" && db && prod.idDoc) {
-                await deleteDoc(doc(db, "iapci_stock", prod.idDoc));
-              }
-              inventario.splice(prodIndex, 1);
-              mostrarToast(`🗑️ El producto "${prod.codigo}" ha sido eliminado por completo de la pestaña de estatus y stock porque su stock llegó a 0.`, "info");
+            // Si el producto fue creado por este registro y no tiene movimientos posteriores (entradas/salidas adicionales)
+            if (prod.entradas === 0 && prod.salidas === 0 && prod.stockInic === cantEntrada) {
+              eliminarProductoCompleto = true;
             } else {
+              if (cantEntrada > 0) {
+                prod.entradas = Math.max(0, prod.entradas - cantEntrada);
+              }
+              if (cantSalida > 0) {
+                prod.salidas = Math.max(0, prod.salidas - cantSalida);
+              }
+
               if (typeof db !== "undefined" && db && prod.idDoc) {
                 await updateDoc(doc(db, "iapci_stock", prod.idDoc), {
                   entradas: prod.entradas,
@@ -1152,9 +1148,19 @@ async function eliminarRegistro() {
             }
           }
 
-          const movLimpioParaPapelera = {  
-            ...movEliminado,  
-            timestamp: Date.now()  
+          if (eliminarProductoCompleto && prodIndex !== -1) {
+            // Eliminar completamente de la lista de inventario local y de Firestore
+            const idDocStock = inventario[prodIndex].idDoc;
+            inventario.splice(prodIndex, 1);
+
+            if (typeof db !== "undefined" && db && idDocStock) {
+              await deleteDoc(doc(db, "iapci_stock", idDocStock));
+            }
+          }
+
+          const movLimpioParaPapelera = { 
+            ...movEliminado, 
+            timestamp: Date.now() 
           };
           delete movLimpioParaPapelera.idDoc;
 
@@ -1173,7 +1179,15 @@ async function eliminarRegistro() {
           }
 
           actualizarTodo(null);
-          mostrarToast("🗑 El último registro ha sido eliminado y enviado a la papelera.", "success");
+          
+          let barrerMensaje = "";
+          if (eliminarProductoCompleto) {
+            barrerMensaje = "🗑 El producto fue eliminado completamente de la pestaña 'Estatus y Stock' y enviado a la papelera.";
+          } else {
+            barrerMensaje = "🗑 El último registro fue eliminado, su stock ajustado y enviado a la papelera.";
+          }
+          mostrarToast(barrerMensaje, "success");
+
         } catch (err) {
           console.error("Error al eliminar registro:", err);
           mostrarToast("❌ Ocurrió un error al procesar la eliminación.", "error");
