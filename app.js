@@ -1,14 +1,34 @@
 // ==========================================
 // CEREBRO UNIFICADO DEL SISTEMA - IAPCI 2026
-// (Sincronización Firestore en Tiempo Real + Respaldo Local + Sesión Única)
+// (Sincronización Firestore + Respaldo Local + Sesión Única)
 // ==========================================
+
+// --- CONFIGURACIÓN DE FIREBASE ---
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyBoxo-t-y9gVPfy4plLis9miw6GgAlvhCk",
+  authDomain: "iapci-sistema.firebaseapp.com",
+  projectId: "iapci-sistema",
+  storageBucket: "iapci-sistema.firebasestorage.app",
+  messagingSenderId: "946059568617",
+  appId: "1:946059568617:web:d58922d7c07845b40e1778",
+  measurementId: "G-BS2CZ07SRC"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
 
 // --- 0. FUNCIÓN DE IMPRESIÓN DE REPORTE GENERAL ---
 function imprimirReporte() {
-  // Asegura que se encuentre activa la pestaña de reporte general
   cambiarPestana('reporte');
-  
-  // Da un pequeño respiro para que el DOM renderice la vista correctamente antes de invocar la impresión
   setTimeout(() => {
     window.print();
   }, 200);
@@ -41,7 +61,7 @@ canalSincronizacion.onmessage = function (event) {
   }
 };
 
-// --- UTILIDADES DE NOTIFICACIÓN Y DIÁLOGOS MOSTRADOS EN PANTALLA (Duración 5 segundos) ---
+// --- UTILIDADES DE NOTIFICACIÓN Y DIÁLOGOS ---
 function mostrarToast(mensaje, tipo = 'info') {
   let container = document.getElementById("iapci-toast-container");
   if (!container) {
@@ -65,7 +85,7 @@ function mostrarToast(mensaje, tipo = 'info') {
     toast.style.opacity = "0";
     toast.style.transform = "translateY(-10px)";
     setTimeout(() => toast.remove(), 300);
-  }, 5000); // ⏱️ Ajustado a 5 segundos exactos
+  }, 5000);
 }
 
 function solicitarConfirmacion(mensaje, accionConfirmada) {
@@ -88,52 +108,74 @@ function solicitarConfirmacion(mensaje, accionConfirmada) {
   box.querySelector("#btn-conf-no").onclick = () => { document.body.removeChild(overlay); };
 }
 
-// --- 2. ESTADO GLOBAL E INICIALIZACIÓN DE DATOS LOCALES ---
-function obtenerUsuariosIniciales() {
-  const guardados = localStorage.getItem("iapci_usuarios");
-  if (guardados) {
-    try { return JSON.parse(guardados); } catch (e) { console.error("Error al cargar usuarios guardados", e); }
-  }
-  return {
-    "soporte": { clave: "1234", rol: "Soporte Técnico" },
-    "admin": { clave: "admin123", rol: "Administrador" },
-    "asistente": { clave: "asi123", rol: "Asistente" }
-  };
-}
-
-function obtenerTasaInicial() {
-  const hoyStr = new Date().toLocaleDateString();
-  const tasaGuardada = localStorage.getItem("tasa_valor");
-  const fechaGuardada = localStorage.getItem("tasa_fecha");
-
-  if (tasaGuardada && fechaGuardada === hoyStr) {
-    return parseFloat(tasaGuardada);
-  }
-  return 36.50;
-}
-
-function obtenerInventarioInicial() {
-  const guardado = localStorage.getItem("iapci_inventario");
-  if (guardado) {
-    try { return JSON.parse(guardado); } catch (e) { console.error("Error al cargar inventario local", e); }
-  }
-  return [];
-}
-
-function obtenerHistorialInicial() {
-  const guardado = localStorage.getItem("iapci_historial");
-  if (guardado) {
-    try { return JSON.parse(guardado); } catch (e) { console.error("Error al cargar historial local", e); }
-  }
-  return [];
-}
-
-let usuarios = obtenerUsuariosIniciales();
+// --- 2. ESTADO GLOBAL E INICIALIZACIÓN DE DATOS (Firestore + Respaldo Local) ---
+let usuarios = {
+  "soporte": { clave: "1234", rol: "Soporte Técnico" },
+  "admin": { clave: "admin123", rol: "Administrador" },
+  "asistente": { clave: "asi123", rol: "Asistente" }
+};
 let usuarioActual = null;
-let tasaCambioBCV = obtenerTasaInicial();
+let tasaCambioBCV = 36.50;
 
-let inventario = obtenerInventarioInicial();
-let historialMovimientos = obtenerHistorialInicial();
+let inventario = [];
+let historialMovimientos = [];
+let papeleraMovimientos = [];
+const CAPACIDAD_MAXIMA_PAPELERA = 100;
+
+// Carga inicial asíncrona desde Firebase Firestore
+async function cargarDatosRemotos() {
+  try {
+    if (db) {
+      // 1. Cargar Usuarios
+      const snapUsuarios = await db.collection("iapci_usuarios").get();
+      if (!snapUsuarios.empty) {
+        let remoteUsers = {};
+        snapUsuarios.forEach(doc => {
+          remoteUsers[doc.id] = doc.data();
+        });
+        usuarios = remoteUsers;
+      }
+
+      // 2. Cargar Tasa BCV
+      const snapTasa = await db.collection("iapci_tasa").doc("bcv").get();
+      if (snapTasa.exists) {
+        const dataTasa = snapTasa.data();
+        const hoyStr = new Date().toLocaleDateString();
+        if (dataTasa.tasa) tasaCambioBCV = parseFloat(dataTasa.tasa);
+      }
+
+      // 3. Cargar Inventario
+      const snapStock = await db.collection("iapci_stock").get();
+      inventario = [];
+      snapStock.forEach(doc => {
+        inventario.push({ idDoc: doc.id, ...doc.data() });
+      });
+
+      // 4. Cargar Historial
+      const snapHist = await db.collection("iapci_historial").orderBy("timestamp", "desc").get();
+      historialMovimientos = [];
+      snapHist.forEach(doc => {
+        historialMovimientos.push({ idDoc: doc.id, ...doc.data() });
+      });
+
+      // 5. Cargar Papelera
+      const snapPapelera = await db.collection("iapci_papelera").get();
+      papeleraMovimientos = [];
+      snapPapelera.forEach(doc => {
+        papeleraMovimientos.push({ idDoc: doc.id, ...doc.data() });
+      });
+    }
+  } catch (e) {
+    console.error("Error al sincronizar con Firestore, usando modo local de respaldo:", e);
+    // Respaldo local si falla la red
+    const guardadoInv = localStorage.getItem("iapci_inventario");
+    if (guardadoInv) inventario = JSON.parse(guardadoInv);
+    const guardadoHist = localStorage.getItem("iapci_historial");
+    if (guardadoHist) historialMovimientos = JSON.parse(guardadoHist);
+    const guardadoPap = localStorage.getItem("iapci_papelera");
+    if (guardadoPap) papeleraMovimientos = JSON.parse(guardadoPap);
+  }
+}
 
 // --- MAPA DE ESTADOS ANTERIORES PARA DETECTAR CAMBIOS DE ESTATUS ---
 let estadosAnterioresInventario = {};
@@ -150,7 +192,9 @@ function inicializarMapaEstados() {
   });
 }
 
-window.addEventListener("DOMContentLoaded", () => {
+window.addEventListener("DOMContentLoaded", async () => {
+  await cargarDatosRemotos();
+
   const usuarioGuardado = localStorage.getItem("iapci_usuario_activo_nombre");
   if (usuarioGuardado && usuarios[usuarioGuardado]) {
     usuarioActual = usuarios[usuarioGuardado];
@@ -436,18 +480,12 @@ function guardarEstadoSistema() {
 }
 
 function actualizarTodo(codigoResaltar = null, indiceHistorialResaltar = null) {
-  // Guardar estado actual
   guardarEstadoSistema();
-
-  // Detectar cambios de estatus antes de actualizar las vistas de stock
   detectarYNotificarCambiosDeEstatus();
-
-  // Actualizar las interfaces y tablas activas
   renderTablaStock(codigoResaltar);
   renderTablaHistorial(indiceHistorialResaltar);
   renderReporteGeneral();
 
-  // Notificar a otras pestañas abiertas mediante el canal de sincronización
   try {
     canalSincronizacion.postMessage({ tipo: "ACTUALIZAR_ESTADO_SISTEMA" });
   } catch (e) {
@@ -470,27 +508,25 @@ function detectarYNotificarCambiosDeEstatus() {
 
     const estadoAnterior = estadosAnterioresInventario[codigoKey];
 
-    // Si ya existía y cambió de estado, disparamos la notificación específica
     if (estadoAnterior && estadoAnterior !== estadoActual) {
       const descProd = prod.descripcion || prod.codigo;
       let tipoNotif = "info";
       let icono = "ℹ️";
 
       if (estadoActual === "Buen Nivel") {
-        tipoNotif = "success"; // Verde
+        tipoNotif = "success";
         icono = "✅";
       } else if (estadoActual === "Bajo Nivel") {
-        tipoNotif = "warning"; // Naranja
+        tipoNotif = "warning";
         icono = "⚠️";
       } else if (estadoActual === "Agotado") {
-        tipoNotif = "error"; // Rojo
+        tipoNotif = "error";
         icono = "🚨";
       }
 
       mostrarToast(`${icono} Cambio de estatus [${prod.codigo} - ${descProd}]: De "${estadoAnterior}" ➔ Nuevo Estado: "${estadoActual}"`, tipoNotif);
     }
 
-    // Actualizamos el registro del estado actual
     estadosAnterioresInventario[codigoKey] = estadoActual;
   });
 }
@@ -711,7 +747,6 @@ async function modificarStockFila(index) {
   };
 }
 
-// Botón: Nuevo Producto - Crea y registra un nuevo producto en el inventario y en el historial de movimientos
 function nuevoProducto() {
   verificarPermisoAdmin(async () => {
     const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
@@ -760,7 +795,6 @@ function nuevoProducto() {
   });
 }
 
-// Botón: Buscar Código - Busca un producto existente por su código y muestra sus datos en la sección de stock
 function buscarCodigo() {
   const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
   if (!codigo) {
@@ -790,7 +824,6 @@ function buscarCodigo() {
   }
 }
 
-// Botón: Registro de Entrada - Registra el ingreso de unidades de un producto existente y actualiza el stock y el historial
 async function registrarEntrada() {
   const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
   const cant = parseInt(document.getElementById("f-cantidad").value) || 0;
@@ -842,7 +875,6 @@ async function registrarEntrada() {
   }
 }
 
-// Botón: Registro de Salida - Valida rigurosamente que la salida no supere el stock disponible (frenando la operación y resaltando el campo)
 async function registrarSalida() {
   const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
   const cantInputElem = document.getElementById("f-cantidad");
@@ -872,7 +904,6 @@ async function registrarSalida() {
 
   const stockActualCalculado = prod.stockInic + prod.entradas - prod.salidas;
 
-  // 🛑 Validación estricta solicitada: frena la operación si la salida supera el stock disponible
   if (cant > stockActualCalculado) {
     mostrarToast(`❌ Operación imposible: La salida de (${cant}) supera el stock disponible del producto (${stockActualCalculado} ${prod.und}).`, "error");
     
@@ -882,7 +913,6 @@ async function registrarSalida() {
       cantInputElem.style.backgroundColor = "#fadbd8";
       cantInputElem.style.boxShadow = "0 0 8px rgba(192, 57, 43, 0.6)";
       
-      // Permitir su modificación continua quitando el resaltado al escribir o después de un momento
       const limpiarResaltado = () => {
         cantInputElem.style.borderColor = "";
         cantInputElem.style.backgroundColor = "";
@@ -892,7 +922,7 @@ async function registrarSalida() {
       cantInputElem.addEventListener("input", limpiarResaltado);
       setTimeout(limpiarResaltado, 6000);
     }
-    return; // Frena la ejecución del registro de salida
+    return;
   }
 
   const nuevasSalidas = prod.salidas + cant;
@@ -986,7 +1016,6 @@ function renderTablaHistorial(indiceResaltar = null) {
   }
 }
 
-// Botón: Eliminar Último Registro (Ajustando stock y enviando a papelera)
 function eliminarRegistro() {
   verificarPermisoAdmin(async () => {
     try {
@@ -996,11 +1025,11 @@ function eliminarRegistro() {
       }
 
       if (papeleraMovimientos.length >= CAPACIDAD_MAXIMA_PAPELERA) {
-        mostrarToast("⚠️ Advertencia: La papelera ha alcanzado su capacidad máxima de 100 registros. Vacíe la papelera para continuar.", "warning");
+        mostrarToast("⚠️ Advertencia: La papelera ha alcanzado su capacidad máxima de 100 registros.", "warning");
         return;
       }
 
-      solicitarConfirmacion("¿Desea eliminar el último movimiento registrado de la pestaña de entradas/salidas, ajustar su cantidad correspondiente en el estatus y stock, y enviar el registro a la papelera?", async () => {
+      solicitarConfirmacion("¿Desea eliminar el último movimiento registrado de la pestaña de entradas/salidas, ajustar su cantidad y enviarlo a la papelera?", async () => {
         try {
           const movEliminado = historialMovimientos.shift();
           if (!movEliminado) return;
@@ -1013,12 +1042,8 @@ function eliminarRegistro() {
             const cantEntrada = movEliminado.entrada || 0;
             const cantSalida = movEliminado.salida || 0;
 
-            if (cantEntrada > 0) {
-              prod.entradas = Math.max(0, prod.entradas - cantEntrada);
-            }
-            if (cantSalida > 0) {
-              prod.salidas = Math.max(0, prod.salidas - cantSalida);
-            }
+            if (cantEntrada > 0) prod.entradas = Math.max(0, prod.entradas - cantEntrada);
+            if (cantSalida > 0) prod.salidas = Math.max(0, prod.salidas - cantSalida);
 
             if (typeof db !== "undefined" && db && prod.idDoc) {
               await db.collection("iapci_stock").doc(prod.idDoc).update({
@@ -1028,19 +1053,14 @@ function eliminarRegistro() {
             }
           }
 
-          const movLimpioParaPapelera = { 
-            ...movEliminado, 
-            timestamp: Date.now() 
-          };
+          const movLimpioParaPapelera = { ...movEliminado, timestamp: Date.now() };
           delete movLimpioParaPapelera.idDoc;
 
           papeleraMovimientos.unshift(movLimpioParaPapelera);
 
           if (typeof db !== "undefined" && db) {
             try {
-              if (idDocHistorial) {
-                await db.collection("iapci_historial").doc(idDocHistorial).delete();
-              }
+              if (idDocHistorial) await db.collection("iapci_historial").doc(idDocHistorial).delete();
               const docRefPapelera = await db.collection("iapci_papelera").add(movLimpioParaPapelera);
               movLimpioParaPapelera.idDoc = docRefPapelera.id;
             } catch (eFire) {
@@ -1049,7 +1069,7 @@ function eliminarRegistro() {
           }
 
           actualizarTodo(prod ? prod.codigo : null);
-          mostrarToast("🗑 El último registro de entrada/salida ha sido eliminado de la pestaña de registro, su stock fue ajustado correctamente y se envió a la papelera.", "success");
+          mostrarToast("🗑 El último registro ha sido eliminado y enviado a la papelera.", "success");
         } catch (err) {
           console.error("Error al eliminar registro:", err);
           mostrarToast("❌ Ocurrió un error al procesar la eliminación.", "error");
@@ -1061,7 +1081,6 @@ function eliminarRegistro() {
   });
 }
 
-// Botón: Limpiar Registro - Restablece/limpia todos los campos del formulario de entrada/registro actual
 function limpiarFormulario() {
   document.getElementById("f-codigo").value = "";
   document.getElementById("f-producto").value = "";
@@ -1074,7 +1093,6 @@ function limpiarFormulario() {
   document.getElementById("f-observacion").value = "";
 }
 
-// --- FUNCIÓN ACTUALIZADA Y UNIFICADA DE REPORTE GENERAL ---
 function renderReporteGeneral() {
   let totalProd = inventario.length;
   let valorTotalBs = 0, stockDisponible = 0, totalSalidas = 0;
@@ -1092,13 +1110,9 @@ function renderReporteGeneral() {
     stockDisponible += stockAct;
     totalSalidas += prod.salidas;
 
-    if (stockAct > minStockVal) {
-      buenNivel++;
-    } else if (stockAct > 0) {
-      bajoNivel++;
-    } else {
-      agotados++;
-    }
+    if (stockAct > minStockVal) buenNivel++;
+    else if (stockAct > 0) bajoNivel++;
+    else agotados++;
 
     if (!categoriasMap[catNombre]) {
       categoriasMap[catNombre] = { productos: 0, stockTotal: 0, valorStockBs: 0, tieneAgotado: false, tieneBajoNivel: false };
@@ -1107,11 +1121,8 @@ function renderReporteGeneral() {
     categoriasMap[catNombre].stockTotal += stockAct;
     categoriasMap[catNombre].valorStockBs += valBs;
 
-    if (stockAct <= 0) {
-      categoriasMap[catNombre].tieneAgotado = true;
-    } else if (stockAct <= minStockVal) {
-      categoriasMap[catNombre].tieneBajoNivel = true;
-    }
+    if (stockAct <= 0) categoriasMap[catNombre].tieneAgotado = true;
+    else if (stockAct <= minStockVal) categoriasMap[catNombre].tieneBajoNivel = true;
   });
 
   const actualizarTextoPorIds = (ids, valor) => {
@@ -1168,11 +1179,8 @@ function renderReporteGeneral() {
       sumaCatValor += datos.valorStockBs;
 
       let estadoGralTexto = "✔ Buen Nivel";
-      if (datos.tieneAgotado) {
-        estadoGralTexto = "🚫 Agotado";
-      } else if (datos.tieneBajoNivel) {
-        estadoGralTexto = "⚠️ Bajo Nivel";
-      }
+      if (datos.tieneAgotado) estadoGralTexto = "🚫 Agotado";
+      else if (datos.tieneBajoNivel) estadoGralTexto = "⚠️ Bajo Nivel";
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
@@ -1203,20 +1211,8 @@ function renderReporteGeneral() {
 }
 
 // ==========================================
-// APARTADO EXCLUSIVO: GESTIÓN DE PAPELERA
+// APARTADO: GESTIÓN DE PAPELERA
 // ==========================================
-const CAPACIDAD_MAXIMA_PAPELERA = 100;
-
-function obtenerPapeleraInicial() {
-  const guardado = localStorage.getItem("iapci_papelera");
-  if (guardado) {
-    try { return JSON.parse(guardado); } catch (e) { console.error("Error al cargar papelera local", e); }
-  }
-  return [];
-}
-
-let papeleraMovimientos = obtenerPapeleraInicial();
-
 function toggleModalPapelera() {
   const modal = document.getElementById("modal-papelera");
   if (modal) {
@@ -1335,22 +1331,16 @@ function restaurarRegistroPapelera(index) {
       const idDocPapelera = movRestaurar.idDoc;
       
       papeleraMovimientos.splice(index, 1);
-      
       delete movRestaurar.idDoc;
 
       const codigoRestaurar = (movRestaurar.codigo || "").toUpperCase();
-
       historialMovimientos.unshift({ ...movRestaurar, timestamp: Date.now() });
 
       let prod = inventario.find(p => (p.codigo || "").toUpperCase() === codigoRestaurar);
       
       if (prod) {
-        if (movRestaurar.entrada > 0) {
-          prod.entradas += movRestaurar.entrada;
-        }
-        if (movRestaurar.salida > 0) {
-          prod.salidas += movRestaurar.salida;
-        }
+        if (movRestaurar.entrada > 0) prod.entradas += movRestaurar.entrada;
+        if (movRestaurar.salida > 0) prod.salidas += movRestaurar.salida;
         if (movRestaurar.precio > 0) prod.precioBs = movRestaurar.precio;
 
         if (typeof db !== "undefined" && db && prod.idDoc) {
@@ -1376,7 +1366,6 @@ function restaurarRegistroPapelera(index) {
         };
         
         inventario.push(nuevoProd);
-
         if (typeof db !== "undefined" && db) {
           const docRefStock = await db.collection("iapci_stock").add(nuevoProd);
           nuevoProd.idDoc = docRefStock.id;
@@ -1384,14 +1373,12 @@ function restaurarRegistroPapelera(index) {
       }
 
       if (typeof db !== "undefined" && db) {
-        if (idDocPapelera) {
-          await db.collection("iapci_papelera").doc(idDocPapelera).delete();
-        }
+        if (idDocPapelera) await db.collection("iapci_papelera").doc(idDocPapelera).delete();
         await db.collection("iapci_historial").add({ ...movRestaurar, timestamp: Date.now() });
       }
 
       actualizarTodo(codigoRestaurar);
-      mostrarToast("✅ Registro restaurado de la papelera exitosamente y reajustado en el estatus y stock.", "success");
+      mostrarToast("✅ Registro restaurado de la papelera exitosamente.", "success");
       renderTablaPapelera();
     }
   });
@@ -1432,7 +1419,7 @@ function vaciarPapelera() {
       return;
     }
 
-    solicitarConfirmacion("⚠️ ¿Está seguro de que desea vaciar permanentemente toda la papelera? Esta acción no se puede deshacer.", async () => {
+    solicitarConfirmacion("⚠️ ¿Está seguro de que desea vaciar permanentemente toda la papelera?", async () => {
       try {
         if (typeof db !== "undefined" && db) {
           const snapshot = await db.collection("iapci_papelera").get();
