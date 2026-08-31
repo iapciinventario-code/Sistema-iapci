@@ -12,7 +12,29 @@ async function guardarDatosUsuario(datos) {
     }
 }
 
+// --- CONFIGURACIÓN DE FIREBASE ---
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// [https://firebase.google.com/docs/web/setup#available-libraries](https://firebase.google.com/docs/web/setup#available-libraries)
 
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+    apiKey: "AIzaSyDYOOtrqzSTS8vmWpBL7-YHldXVU6tudk0",
+  authDomain: "sistema-iapci.firebaseapp.com",
+  databaseURL: "[https://sistema-iapci-default-rtdb.firebaseio.com](https://sistema-iapci-default-rtdb.firebaseio.com)",
+  projectId: "sistema-iapci",
+  storageBucket: "sistema-iapci.firebasestorage.app",
+  messagingSenderId: "84463581447",
+  appId: "1:84463581447:web:0a1146829d38ba06fe2da2",
+  measurementId: "G-L4638HK45V"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app); // 👈 Inicializa la base de datos globalmente
 // ==========================================
 // CEREBRO UNIFICADO DEL SISTEMA - IAPCI 2026[cite: 11]
 // (Sincronización Firestore en Tiempo Real + Respaldo Local + Sesión Única)[cite: 11]
