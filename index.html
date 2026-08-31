@@ -60,7 +60,6 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
-}
 const db = firebase.firestore();
     // Activar persistencia offline
     db.enablePersistence()
@@ -291,6 +290,11 @@ const db = firebase.firestore();
                 <td id="tot-monto-total">Bs.S 0,00</td>
                 <td></td>
               </tr>
+              <tr>
+                <td colspan="10" style="text-align: right; font-weight: bold;">Total General USD:</td>
+                <td id="tot-monto-total-usd" style="font-weight: bold;">$ 0.00</td>
+                <td></td>
+              </tr>
             </tfoot>
           </table>
         </section>
@@ -410,3 +414,4 @@ const db = firebase.firestore();
 
 </body>
 </html>
+```[cite: 9]
