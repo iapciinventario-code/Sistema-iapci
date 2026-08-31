@@ -783,27 +783,18 @@ async function modificarStockFila(index) {
   };
 }
 
-async function nuevoProducto() {
+// Botón: Nuevo Producto - Crea y registra un nuevo producto en el inventario y en el historial de movimientos
+function nuevoProducto() {
   verificarPermisoAdmin(async () => {
-    const fCodigo = document.getElementById("f-codigo");
-    const fProducto = document.getElementById("f-producto");
-    const fCategoria = document.getElementById("f-categoria");
-    const fPasillo = document.getElementById("f-pasillo");
-    const fUnd = document.getElementById("f-und");
-    const fPrecio = document.getElementById("f-precio");
-    const fCantidad = document.getElementById("f-cantidad");
-    const fStockMin = document.getElementById("f-stock-min");
-    const fObservacion = document.getElementById("f-observacion");
-
-    const codigo = fCodigo ? fCodigo.value.trim().toUpperCase() : "";
-    const descripcion = fProducto ? fProducto.value.trim().toUpperCase() : "";
-    const categoria = fCategoria ? fCategoria.value.trim() : "General";
-    const pasillo = fPasillo ? parseInt(fPasillo.value) || 0 : 0;
-    const und = fUnd ? fUnd.value.trim() || "UND" : "UND";
-    const precioBs = fPrecio ? parseFloat(fPrecio.value) || 0 : 0;
-    const cantInic = fCantidad ? parseInt(fCantidad.value) || 0 : 0;
-    const stockMinInput = fStockMin ? parseInt(fStockMin.value) || 12 : 12;
-    const obs = fObservacion ? fObservacion.value.trim() || `Nuevo producto ${new Date().toLocaleDateString()}` : "";
+    const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
+    const descripcion = document.getElementById("f-producto").value.trim().toUpperCase();
+    const categoria = document.getElementById("f-categoria").value.trim() || "General";
+    const pasillo = parseInt(document.getElementById("f-pasillo").value) || 0;
+    const und = document.getElementById("f-und").value.trim() || "UND";
+    const precioBs = parseFloat(document.getElementById("f-precio").value) || 0;
+    const cantInic = parseInt(document.getElementById("f-cantidad").value) || 0;
+    const stockMinInput = parseInt(document.getElementById("f-stock-min")?.value) || 12;
+    const obs = document.getElementById("f-observacion").value.trim() || `Nuevo producto ${new Date().toLocaleDateString()}`;
 
     if (!codigo || !descripcion) {
       mostrarToast("Por favor introduce el Código y la Descripción antes de crear el nuevo producto.", "warning");
@@ -835,15 +826,15 @@ async function nuevoProducto() {
     historialMovimientos.unshift(nuevoHistObj);
     actualizarTodo(null, 0);
 
-    mostrarToast(`✅ Producto "${descripcion}" guardado exitosamente en Firestore.`, "success");
+    mostrarToast(`✅ Producto "${descripcion}" guardado exitosamente.`, "success");
     limpiarFormulario();
     cambiarPestana('registro');
   });
 }
 
+// Botón: Buscar Código - Busca un producto existente por su código y muestra sus datos en la sección de stock
 function buscarCodigo() {
-  const fCodigo = document.getElementById("f-codigo");
-  const codigo = fCodigo ? fCodigo.value.trim().toUpperCase() : "";
+  const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
   if (!codigo) {
     mostrarToast("Escribe un Código de producto en el campo para buscar.", "warning");
     return;
@@ -851,27 +842,18 @@ function buscarCodigo() {
 
   const prod = inventario.find(p => p.codigo.toUpperCase() === codigo);
   if (prod) {
-    if (fCodigo) fCodigo.value = prod.codigo;
-    const fProducto = document.getElementById("f-producto");
-    const fCategoria = document.getElementById("f-categoria");
-    const fPasillo = document.getElementById("f-pasillo");
-    const fUnd = document.getElementById("f-und");
-    const fStockMin = document.getElementById("f-stock-min");
-    const fPrecio = document.getElementById("f-precio");
-    const fCantidad = document.getElementById("f-cantidad");
-    const fObservacion = document.getElementById("f-observacion");
-
-    if (fProducto) fProducto.value = prod.descripcion;
-    if (fCategoria) fCategoria.value = prod.categoria;
-    if (fPasillo) fPasillo.value = prod.pasillo;
-    if (fUnd) fUnd.value = prod.und;
-    if (fStockMin) {
-      fStockMin.value = prod.stockMin !== undefined ? prod.stockMin : 12;
+    document.getElementById("f-codigo").value = prod.codigo;
+    document.getElementById("f-producto").value = prod.descripcion;
+    document.getElementById("f-categoria").value = prod.categoria;
+    document.getElementById("f-pasillo").value = prod.pasillo;
+    document.getElementById("f-und").value = prod.und;
+    if (document.getElementById("f-stock-min")) {
+      document.getElementById("f-stock-min").value = prod.stockMin !== undefined ? prod.stockMin : 12;
     }
     
-    if (fPrecio) fPrecio.value = "";
-    if (fCantidad) fCantidad.value = "";
-    if (fObservacion) fObservacion.value = "";
+    document.getElementById("f-precio").value = "";
+    document.getElementById("f-cantidad").value = "";
+    document.getElementById("f-observacion").value = "";
     
     cambiarPestana('stock');
     renderTablaStock(prod.codigo);
@@ -880,16 +862,12 @@ function buscarCodigo() {
   }
 }
 
+// Botón: Registro de Entrada - Registra el ingreso de unidades de un producto existente y actualiza el stock y el historial
 async function registrarEntrada() {
-  const fCodigo = document.getElementById("f-codigo");
-  const fCantidad = document.getElementById("f-cantidad");
-  const fPrecio = document.getElementById("f-precio");
-  const fObservacion = document.getElementById("f-observacion");
-
-  const codigo = fCodigo ? fCodigo.value.trim().toUpperCase() : "";
-  const cant = fCantidad ? parseInt(fCantidad.value) || 0 : 0;
-  const precioNuevo = fPrecio ? parseFloat(fPrecio.value) || 0 : 0;
-  const obs = fObservacion ? fObservacion.value.trim() || "REPOSICIÓN" : "REPOSICIÓN";
+  const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
+  const cant = parseInt(document.getElementById("f-cantidad").value) || 0;
+  const precioNuevo = parseFloat(document.getElementById("f-precio").value) || 0;
+  const obs = document.getElementById("f-observacion").value.trim() || "REPOSICIÓN";
   const prod = inventario.find(p => p.codigo.toUpperCase() === codigo);
 
   if (prod && cant > 0) {
@@ -936,16 +914,13 @@ async function registrarEntrada() {
   }
 }
 
+// Botón: Registro de Salida - Valida rigurosamente que la salida no supere el stock disponible (frenando la operación y resaltando el campo)
 async function registrarSalida() {
-  const fCodigo = document.getElementById("f-codigo");
+  const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
   const cantInputElem = document.getElementById("f-cantidad");
-  const fPrecio = document.getElementById("f-precio");
-  const fObservacion = document.getElementById("f-observacion");
-
-  const codigo = fCodigo ? fCodigo.value.trim().toUpperCase() : "";
-  const cant = cantInputElem ? parseInt(cantInputElem.value) || 0 : 0;
-  const precio = fPrecio ? parseFloat(fPrecio.value) || 0 : 0;
-  const obs = fObservacion ? fObservacion.value.trim() || "VENTA" : "VENTA";
+  const cant = parseInt(cantInputElem?.value) || 0;
+  const precio = parseFloat(document.getElementById("f-precio").value) || 0;
+  const obs = document.getElementById("f-observacion").value.trim() || "VENTA";
   const prod = inventario.find(p => p.codigo.toUpperCase() === codigo);
 
   if (!prod) {
@@ -1155,26 +1130,17 @@ function eliminarRegistro() {
   });
 }
 
+// Botón: Limpiar Registro - Restablece/limpia todos los campos del formulario de entrada/registro actual
 function limpiarFormulario() {
-  const fCodigo = document.getElementById("f-codigo");
-  const fProducto = document.getElementById("f-producto");
-  const fCategoria = document.getElementById("f-categoria");
-  const fPasillo = document.getElementById("f-pasillo");
-  const fUnd = document.getElementById("f-und");
-  const fPrecio = document.getElementById("f-precio");
-  const fCantidad = document.getElementById("f-cantidad");
-  const fStockMin = document.getElementById("f-stock-min");
-  const fObservacion = document.getElementById("f-observacion");
-
-  if (fCodigo) fCodigo.value = "";
-  if (fProducto) fProducto.value = "";
-  if (fCategoria) fCategoria.value = "";
-  if (fPasillo) fPasillo.value = "";
-  if (fUnd) fUnd.value = "";
-  if (fPrecio) fPrecio.value = "";
-  if (fCantidad) fCantidad.value = "";
-  if (fStockMin) fStockMin.value = "12";
-  if (fObservacion) fObservacion.value = "";
+  document.getElementById("f-codigo").value = "";
+  document.getElementById("f-producto").value = "";
+  document.getElementById("f-categoria").value = "";
+  document.getElementById("f-pasillo").value = "";
+  document.getElementById("f-und").value = "";
+  document.getElementById("f-precio").value = "";
+  document.getElementById("f-cantidad").value = "";
+  document.getElementById("f-stock-min").value = "12";
+  document.getElementById("f-observacion").value = "";
 }
 
 function renderReporteGeneral() {
