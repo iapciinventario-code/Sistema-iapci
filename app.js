@@ -221,8 +221,13 @@ function inicializarMapaEstados() {
     const stockActual = prod.stockInic + prod.entradas - prod.salidas;
     const stockMinVal = prod.stockMin !== undefined ? prod.stockMin : 100;
     let estado = "Buen Nivel";
-    if (stockActual <= 0) estado = "Agotado";
-    else if (stockActual < stockMinVal) estado = "Bajo Nivel";
+    if (stockActual <= 0) {
+      estado = "Agotado";
+    } else if (stockActual < 100 || stockActual < stockMinVal) {
+      estado = "Bajo Nivel";
+    } else {
+      estado = "Buen Nivel";
+    }
     estadosAnterioresInventario[prod.codigo.toUpperCase()] = estado;
   });
 }
@@ -537,8 +542,10 @@ function detectarYNotificarCambiosDeEstatus() {
     let estadoActual = "Buen Nivel";
     if (stockActual <= 0) {
       estadoActual = "Agotado";
-    } else if (stockActual < stockMinVal) {
+    } else if (stockActual < 100 || stockActual < stockMinVal) {
       estadoActual = "Bajo Nivel";
+    } else {
+      estadoActual = "Buen Nivel";
     }
 
     const estadoAnterior = estadosAnterioresInventario[codigoKey];
@@ -578,8 +585,15 @@ function renderTablaStock(codigoResaltar = null) {
     const valorDisponibleBs = stockActual * prod.precioBs;
     
     const stockMinVal = prod.stockMin !== undefined ? prod.stockMin : 100;
-    const estado = stockActual >= stockMinVal ? "Buen Nivel" : (stockActual > 0 ? "Bajo Nivel" : "Agotado");
-    const claseBadge = stockActual >= stockMinVal ? "badge-buen" : (stockActual > 0 ? "badge-bajo" : "badge-agotado");
+    let estado = "Buen Nivel";
+    if (stockActual <= 0) {
+      estado = "Agotado";
+    } else if (stockActual < 100 || stockActual < stockMinVal) {
+      estado = "Bajo Nivel";
+    } else {
+      estado = "Buen Nivel"; // Solo dice "buen nivel" si es igual o mayor a 100
+    }
+    const claseBadge = estado === "Buen Nivel" ? "badge-buen" : (estado === "Bajo Nivel" ? "badge-bajo" : "badge-agotado");
 
     totalInic += prod.stockInic;
     totalEntradas += prod.entradas;
@@ -1167,7 +1181,7 @@ function limpiarFormulario() {
   document.getElementById("f-und").value = "";
   document.getElementById("f-precio").value = "";
   document.getElementById("f-cantidad").value = "";
-  document.getElementById("f-stock-min").value = "100";
+  document.getElementById("f-stock-min").value = "100"; // Asegura que el valor por defecto sea 100
   document.getElementById("f-observacion").value = "";
 }
 
@@ -1188,9 +1202,18 @@ function renderReporteGeneral() {
     stockDisponible += stockAct;
     totalSalidas += prod.salidas;
 
-    if (stockAct >= minStockVal) {
+    let estado = "Buen Nivel";
+    if (stockAct <= 0) {
+      estado = "Agotado";
+    } else if (stockAct < 100 || stockAct < minStockVal) {
+      estado = "Bajo Nivel";
+    } else {
+      estado = "Buen Nivel";
+    }
+
+    if (estado === "Buen Nivel") {
       buenNivel++;
-    } else if (stockAct > 0) {
+    } else if (estado === "Bajo Nivel") {
       bajoNivel++;
     } else {
       agotados++;
@@ -1205,7 +1228,7 @@ function renderReporteGeneral() {
 
     if (stockAct <= 0) {
       categoriasMap[catNombre].tieneAgotado = true;
-    } else if (stockAct < minStockVal) {
+    } else if (stockAct < 100 || stockAct < minStockVal) {
       categoriasMap[catNombre].tieneBajoNivel = true;
     }
   });
