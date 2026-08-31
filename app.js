@@ -851,8 +851,7 @@ function nuevoProducto() {
     }
 
     const nuevoProdObj = {
-      codigo, descripcion, categoria, pasillo, und, precioBs, stockInic: cantInic, entradas: 0, salidas: 0, stockMin: stockMinInput, obs,
-      creadoPorNuevoProducto: true // 👈 Condición requerida
+      codigo, descripcion, categoria, pasillo, und, precioBs, stockInic: cantInic, entradas: 0, salidas: 0, stockMin: stockMinInput, obs, creadoConNuevoProducto: true
     };
 
     const nuevoHistObj = {
@@ -1100,7 +1099,7 @@ function renderTablaHistorial(indiceResaltar = null) {
   }
 }
 
-function eliminarRegistro() {
+async function eliminarRegistro() {
   verificarPermisoAdmin(async () => {
     try {
       if (!historialMovimientos || historialMovimientos.length === 0) {
@@ -1113,7 +1112,7 @@ function eliminarRegistro() {
         return;
       }
 
-      solicitarConfirmacion("¿Desea eliminar el último movimiento registrado y evaluar su estatus de stock?", async () => {
+      solicitarConfirmacion("¿Desea eliminar el último movimiento registrado de la pestaña de entradas/salidas, ajustar su cantidad correspondiente en el estatus y stock, y enviar el registro a la papelera?", async () => {
         try {
           const movEliminado = historialMovimientos.shift();
           if (!movEliminado) return;
@@ -1121,11 +1120,9 @@ function eliminarRegistro() {
           const idDocHistorial = movEliminado.idDoc;
           const codigoMov = (movEliminado.codigo || "").toUpperCase();
           const prodIndex = inventario.findIndex(p => (p.codigo || "").toUpperCase() === codigoMov);
-          
-          let productoEliminadoPorCompleto = false;
 
           if (prodIndex !== -1) {
-            let prod = inventario[prodIndex];
+            const prod = inventario[prodIndex];
             const cantEntrada = movEliminado.entrada || 0;
             const cantSalida = movEliminado.salida || 0;
 
@@ -1136,15 +1133,15 @@ function eliminarRegistro() {
               prod.salidas = Math.max(0, prod.salidas - cantSalida);
             }
 
-            const stockActualCalculado = prod.stockInic + prod.entradas - prod.salidas;
+            const stockActualResultante = prod.stockInic + prod.entradas - prod.salidas;
 
-            // Condición: Si el stock llega a 0 Y fue creado previamente mediante "nuevo producto"
-            if (stockActualCalculado <= 0 && prod.creadoPorNuevoProducto === true) {
+            // Condición: Stock en 0 y originado previamente mediante el botón "Nuevo Producto"
+            if (stockActualResultante <= 0 && prod.creadoConNuevoProducto === true) {
               if (typeof db !== "undefined" && db && prod.idDoc) {
                 await deleteDoc(doc(db, "iapci_stock", prod.idDoc));
               }
               inventario.splice(prodIndex, 1);
-              productoEliminadoPorCompleto = true;
+              mostrarToast(`🗑️ El producto "${prod.codigo}" ha sido eliminado por completo de la pestaña de estatus y stock porque su stock llegó a 0.`, "info");
             } else {
               if (typeof db !== "undefined" && db && prod.idDoc) {
                 await updateDoc(doc(db, "iapci_stock", prod.idDoc), {
@@ -1155,9 +1152,9 @@ function eliminarRegistro() {
             }
           }
 
-          const movLimpioParaPapelera = { 
-            ...movEliminado, 
-            timestamp: Date.now() 
+          const movLimpioParaPapelera = {  
+            ...movEliminado,  
+            timestamp: Date.now()  
           };
           delete movLimpioParaPapelera.idDoc;
 
@@ -1175,13 +1172,8 @@ function eliminarRegistro() {
             }
           }
 
-          actualizarTodo(productoEliminadoPorCompleto ? null : codigoMov);
-          
-          if (productoEliminadoPorCompleto) {
-            mostrarToast("🗑️ El stock llegó a 0 y el producto fue eliminado por completo de la pestaña de estatus y stock por cumplir con la condición de registro inicial.", "success");
-          } else {
-            mostrarToast("🗑️ El último registro fue eliminado y el stock se ajustó correctamente.", "success");
-          }
+          actualizarTodo(null);
+          mostrarToast("🗑 El último registro ha sido eliminado y enviado a la papelera.", "success");
         } catch (err) {
           console.error("Error al eliminar registro:", err);
           mostrarToast("❌ Ocurrió un error al procesar la eliminación.", "error");
