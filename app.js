@@ -1177,74 +1177,78 @@ function eliminarRegistro() {
           if (!movEliminado) return;
 
           const idDocHistorial = movEliminado.idDoc;
-          const codigoMov = (movEliminado.codigo || "").toUpperCase();
-          const prodIndex = inventario.findIndex(p => (p.codigo || "").toUpperCase() === codigoMov);
-          const prod = prodIndex !== -1 ? inventario[prodIndex] : null;
-
-          let eliminarProductoCompleto = false;
-
-          if (prod) {
-            const cantEntrada = Number(movEliminado.entrada || movEliminado.cantidad || 0);
-            
-            // Si el movimiento actual registró la entrada inicial y el stock actual coincide o no tiene otros movimientos
-            if ((prod.entradas === cantEntrada && prod.salidas === 0) || (prod.stockInic === cantEntrada && prod.entradas === 0 && prod.salidas === 0)) {
-              eliminarProductoCompleto = true;
-            } else {
-              const cantSalida = Number(movEliminado.salida || 0);
-              if (cantEntrada > 0) {
-                prod.entradas = Math.max(0, prod.entradas - cantEntrada);
-              }
-              if (cantSalida > 0) {
-                prod.salidas = Math.max(0, prod.salidas - cantSalida);
-              }
-
-              if (typeof db !== "undefined" && db && prod.idDoc) {
-                await updateDoc(doc(db, "iapci_stock", prod.idDoc), {
-                  entradas: prod.entradas,
-                  salidas: prod.salidas
-                });
-              }
-            }
-          }
-
-          if (eliminarProductoCompleto && prodIndex !== -1) {
-            const idDocStock = inventario[prodIndex].idDoc;
-            inventario.splice(prodIndex, 1);
-
-            if (typeof db !== "undefined" && db && idDocStock) {
-              await deleteDoc(doc(db, "iapci_stock", idDocStock));
-            }
-          }
-
+          const codigoProd = (movEliminado.codigo || "").toUpperCase();
+          
+          delete movEliminado.idDoc;
           const movLimpioParaPapelera = { 
             ...movEliminado, 
             timestamp: Date.now() 
           };
-          delete movLimpioParaPapelera.idDoc;
 
           papeleraMovimientos.unshift(movLimpioParaPapelera);
 
-          if (typeof db !== "undefined" && db) {
-            try {
-              if (idDocHistorial) {
-                await deleteDoc(doc(db, "iapci_historial", idDocHistorial));
-              }
-              const docRefPapelera = await addDoc(collection(db, "iapci_papelera"), movLimpioParaPapelera);
-              movLimpioParaPapelera.idDoc = docRefPapelera.id;
-            } catch (eFire) {
-              console.error("Error al sincronizar papelera/historial en Firestore:", eFire);
+          if (db) {
+            if (idDocHistorial) {
+              await deleteDoc(doc(db, "iapci_historial", idDocHistorial));
+            }
+            const docRefPapelera = await addDoc(collection(db, "iapci_papelera"), movLimpioParaPapelera);
+            movLimpioParaPapelera.idDoc = docRefPapelera.id;
+          }
+
+          // Buscar el producto en el inventario
+          let prodIndex = inventario.findIndex(p => (p.codigo || "").toUpperCase() === codigoProd);
+          let prod = prodIndex !== -1 ? inventario[prodIndex] : null;
+
+          if (prod) {
+            // Recalcular entradas, salidas y precio ponderado recorriendo el historial restante del producto
+            const movimientosRestantes = historialMovimientos.filter(m => (m.codigo || "").toUpperCase() === codigoProd);
+            
+            let totalEntradas = 0;
+            let totalSalidas = 0;
+            let ultimoPrecio = prod.precioBs;
+            let primerPrecioAsignado = false;
+
+            if (movimientosRestantes.length > 0) {
+              movimientosRestantes.reverse().forEach(m => {
+                if (m.entrada > 0) {
+                  totalEntradas += m.entrada;
+                  if (m.precio > 0) {
+                    if (!primerPrecioAsignado) {
+                      ultimoPrecio = m.precio;
+                      primerPrecioAsignado = true;
+                    } else {
+                      ultimoPrecio = (ultimoPrecio + m.precio) / 2;
+                    }
+                  }
+                }
+                if (m.salida > 0) {
+                  totalSalidas += m.salida;
+                  if (m.precio > 0) {
+                    ultimoPrecio = m.precio;
+                  }
+                }
+              });
+              movimientosRestantes.reverse();
+            } else {
+              totalEntradas = 0;
+              totalSalidas = 0;
+            }
+
+            prod.entradas = totalEntradas;
+            prod.salidas = totalSalidas;
+            prod.precioBs = ultimoPrecio;
+
+            if (db && prod.idDoc) {
+              await updateDoc(doc(db, "iapci_stock", prod.idDoc), {
+                entradas: prod.entradas,
+                salidas: prod.salidas,
+                precioBs: prod.precioBs
+              });
             }
           }
 
-          actualizarTodo(null);
-          
-          let barrerMensaje = "";
-          if (eliminarProductoCompleto) {
-            barrerMensaje = "🗑 El producto fue eliminado completamente de la pestaña 'Estatus y Stock' y enviado a la papelera.";
-          } else {
-            barrerMensaje = "🗑 El último registro fue eliminado, su stock ajustado y enviado a la papelera.";
-          }
-          mostrarToast(barrerMensaje, "success");
+          actualizarTodo(codigoProd);
+          mostrarToast("🗑️ El último registro fue enviado a la papelera y los precios y stock se recalcularon correctamente.", "success");
 
         } catch (err) {
           console.error("Error al eliminar registro:", err);
