@@ -850,12 +850,27 @@ function nuevoProducto() {
     const precioVal = precioElem ? precioElem.value.trim() : "";
     const cantVal = cantElem ? cantElem.value.trim() : "";
 
-    // Validación estricta: ningún campo debe estar vacío y la cantidad debe estar presente
-    if (!codigo || !descripcion || !categoria || !pasilloVal || !und || !precioVal || !cantVal) {
+    // Validación específica: verificar obligatoriamente si el campo de cantidad está vacío
+    if (!cantVal) {
+      mostrarToast("⚠️ El campo 'Cantidad (Entrada/Salida)' es obligatorio para registrar un nuevo producto.", "warning");
+      if (cantElem) {
+        cantElem.focus();
+        cantElem.style.borderColor = "#c0392b";
+        cantElem.style.backgroundColor = "#fadbd8";
+        setTimeout(() => {
+          cantElem.style.borderColor = "";
+          cantElem.style.backgroundColor = "";
+        }, 4000);
+      }
+      return;
+    }
+
+    // Validación general para el resto de los campos obligatorios
+    if (!codigo || !descripcion || !categoria || !pasilloVal || !und || !precioVal) {
       mostrarToast("⚠️ Debe llenar todos los datos del producto antes de continuar.", "warning");
       
-      // Resaltar visualmente los campos vacíos
-      [codigoElem, descElem, catElem, pasElem, undElem, precioElem, cantElem].forEach(el => {
+      // Resaltar los campos vacíos
+      [codigoElem, descElem, catElem, pasElem, undElem, precioElem].forEach(el => {
         if (el && !el.value.trim()) {
           el.style.borderColor = "#c0392b";
           el.style.backgroundColor = "#fadbd8";
@@ -875,7 +890,7 @@ function nuevoProducto() {
     const obs = document.getElementById("f-observacion")?.value.trim() || `Nuevo producto ${new Date().toLocaleDateString()}`;
 
     if (cantInic <= 0) {
-      mostrarToast("⚠️ El campo de cantidad debe tener una cantidad válida mayor a 0.", "warning");
+      mostrarToast("⚠️ La cantidad ingresada debe ser mayor a 0.", "warning");
       if (cantElem) {
         cantElem.focus();
         cantElem.style.borderColor = "#c0392b";
