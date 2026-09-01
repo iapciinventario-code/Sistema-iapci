@@ -1671,3 +1671,4 @@ window.eliminarSeleccionadosPapelera = eliminarSeleccionadosPapelera;
 window.vaciarPapelera = vaciarPapelera;
 window.imprimirReporte = imprimirReporte;
 window.validarYProcesarRegistro = validarYProcesarRegistro;
+window.limpiarFormulario = limpiarFormulario;
