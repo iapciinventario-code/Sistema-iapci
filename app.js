@@ -1548,11 +1548,19 @@ async function restaurarRegistroPapelera(index) {
       if (prod) {
         if (movRestaurar.entrada > 0) {
           prod.entradas += movRestaurar.entrada;
+          
+          // Aplica el promedio si el movimiento restaurado es una entrada con precio válido
+          if (movRestaurar.precio > 0) {
+            prod.precioBs = (prod.precioBs + movRestaurar.precio) / 2;
+          }
         }
+        
         if (movRestaurar.salida > 0) {
           prod.salidas += movRestaurar.salida;
+          if (movRestaurar.precio > 0) {
+            prod.precioBs = movRestaurar.precio;
+          }
         }
-        if (movRestaurar.precio > 0) prod.precioBs = movRestaurar.precio;
 
         if (db && prod.idDoc) {
           await updateDoc(doc(db, "iapci_stock", prod.idDoc), {
@@ -1592,12 +1600,11 @@ async function restaurarRegistroPapelera(index) {
       }
 
       actualizarTodo(codigoRestaurar);
-      mostrarToast("✅ Registro restaurado de la papelera exitosamente y reajustado en Firestore.", "success");
+      mostrarToast("✅ Registro restaurado de la papelera exitosamente y reajustado en Firestore con su promedio de entrada.", "success");
       renderTablaPapelera();
     }
   });
 }
-
 async function eliminarSeleccionadosPapelera() {
   verificarPermisoAdmin(async () => {
     const seleccionados = Array.from(document.querySelectorAll('.chk-item-papelera:checked'))
