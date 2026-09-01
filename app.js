@@ -834,18 +834,57 @@ function validarYProcesarRegistro() {
 
 function nuevoProducto() {
   verificarPermisoAdmin(async () => {
-    const codigo = document.getElementById("f-codigo").value.trim().toUpperCase();
-    const descripcion = document.getElementById("f-producto").value.trim().toUpperCase();
-    const categoria = document.getElementById("f-categoria").value.trim() || "General";
-    const pasillo = parseInt(document.getElementById("f-pasillo").value) || 0;
-    const und = document.getElementById("f-und").value.trim() || "UND";
-    const precioBs = parseFloat(document.getElementById("f-precio").value) || 0;
-    const cantInic = parseInt(document.getElementById("f-cantidad").value) || 0;
-    const stockMinInput = parseInt(document.getElementById("f-stock-min")?.value) || 100;
-    const obs = document.getElementById("f-observacion").value.trim() || `Nuevo producto ${new Date().toLocaleDateString()}`;
+    const codigoElem = document.getElementById("f-codigo");
+    const descElem = document.getElementById("f-producto");
+    const catElem = document.getElementById("f-categoria");
+    const pasElem = document.getElementById("f-pasillo");
+    const undElem = document.getElementById("f-und");
+    const precioElem = document.getElementById("f-precio");
+    const cantElem = document.getElementById("f-cantidad");
 
-    if (!codigo || !descripcion) {
-      mostrarToast("Por favor introduce el Código y la Descripción antes de crear el nuevo producto.", "warning");
+    const codigo = codigoElem ? codigoElem.value.trim().toUpperCase() : "";
+    const descripcion = descElem ? descElem.value.trim().toUpperCase() : "";
+    const categoria = catElem ? catElem.value.trim() : "";
+    const pasilloVal = pasElem ? pasElem.value.trim() : "";
+    const und = undElem ? undElem.value.trim() : "";
+    const precioVal = precioElem ? precioElem.value.trim() : "";
+    const cantVal = cantElem ? cantElem.value.trim() : "";
+
+    // Validación estricta: ningún campo debe estar vacío y la cantidad debe estar presente
+    if (!codigo || !descripcion || !categoria || !pasilloVal || !und || !precioVal || !cantVal) {
+      mostrarToast("⚠️ Debe llenar todos los datos del producto antes de continuar.", "warning");
+      
+      // Resaltar visualmente los campos vacíos
+      [codigoElem, descElem, catElem, pasElem, undElem, precioElem, cantElem].forEach(el => {
+        if (el && !el.value.trim()) {
+          el.style.borderColor = "#c0392b";
+          el.style.backgroundColor = "#fadbd8";
+          setTimeout(() => {
+            el.style.borderColor = "";
+            el.style.backgroundColor = "";
+          }, 4000);
+        }
+      });
+      return;
+    }
+
+    const pasillo = parseInt(pasilloVal) || 0;
+    const precioBs = parseFloat(precioVal) || 0;
+    const cantInic = parseInt(cantVal) || 0;
+    const stockMinInput = parseInt(document.getElementById("f-stock-min")?.value) || 100;
+    const obs = document.getElementById("f-observacion")?.value.trim() || `Nuevo producto ${new Date().toLocaleDateString()}`;
+
+    if (cantInic <= 0) {
+      mostrarToast("⚠️ El campo de cantidad debe tener una cantidad válida mayor a 0.", "warning");
+      if (cantElem) {
+        cantElem.focus();
+        cantElem.style.borderColor = "#c0392b";
+        cantElem.style.backgroundColor = "#fadbd8";
+        setTimeout(() => {
+          cantElem.style.borderColor = "";
+          cantElem.style.backgroundColor = "";
+        }, 4000);
+      }
       return;
     }
 
