@@ -1258,15 +1258,28 @@ function eliminarRegistro() {
 }
 
 function limpiarFormulario() {
-  document.getElementById("f-codigo").value = "";
-  document.getElementById("f-producto").value = "";
-  document.getElementById("f-categoria").value = "";
-  document.getElementById("f-pasillo").value = "";
-  document.getElementById("f-und").value = "";
-  document.getElementById("f-precio").value = "";
-  document.getElementById("f-cantidad").value = "";
-  document.getElementById("f-stock-min").value = "100"; // Asegura que el valor por defecto sea 100
-  document.getElementById("f-observacion").value = "";
+  const camposIds = [
+    "f-codigo",
+    "f-producto",
+    "f-categoria",
+    "f-pasillo",
+    "f-und",
+    "f-precio",
+    "f-cantidad",
+    "f-stock-min",
+    "f-observacion"
+  ];
+
+  camposIds.forEach(id => {
+    const elemento = document.getElementById(id);
+    if (elemento) {
+      // Mantiene el valor por defecto de 100 para el stock mínimo y limpia el resto
+      elemento.value = (id === "f-stock-min") ? "100" : "";
+      elemento.style.borderColor = "";
+      elemento.style.backgroundColor = "";
+      elemento.style.boxShadow = "";
+    }
+  });
 }
 
 function renderReporteGeneral() {
