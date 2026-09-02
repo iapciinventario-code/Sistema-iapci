@@ -1200,43 +1200,22 @@ function eliminarRegistro() {
           let prod = prodIndex !== -1 ? inventario[prodIndex] : null;
 
           if (prod) {
-            // Recalcular entradas, salidas y precio ponderado recorriendo el historial restante del producto
-            const movimientosRestantes = historialMovimientos.filter(m => (m.codigo || "").toUpperCase() === codigoProd);
-            
-            let totalEntradas = 0;
-            let totalSalidas = 0;
-            let ultimoPrecio = prod.precioBs;
-            let primerPrecioAsignado = false;
-
-            if (movimientosRestantes.length > 0) {
-              movimientosRestantes.reverse().forEach(m => {
-                if (m.entrada > 0) {
-                  totalEntradas += m.entrada;
-                  if (m.precio > 0) {
-                    if (!primerPrecioAsignado) {
-                      ultimoPrecio = m.precio;
-                      primerPrecioAsignado = true;
-                    } else {
-                      ultimoPrecio = (ultimoPrecio + m.precio) / 2;
-                    }
-                  }
-                }
-                if (m.salida > 0) {
-                  totalSalidas += m.salida;
-                  if (m.precio > 0) {
-                    ultimoPrecio = m.precio;
-                  }
-                }
-              });
-              movimientosRestantes.reverse();
-            } else {
-              totalEntradas = 0;
-              totalSalidas = 0;
+            // Revertir únicamente el efecto del movimiento eliminado sin tocar el stock inicial
+            if (movEliminado.salida > 0) {
+              prod.salidas = Math.max(0, prod.salidas - movEliminado.salida);
+            }
+            if (movEliminado.entrada > 0) {
+              prod.entradas = Math.max(0, prod.entradas - movEliminado.entrada);
             }
 
-            prod.entradas = totalEntradas;
-            prod.salidas = totalSalidas;
-            prod.precioBs = ultimoPrecio;
+            // Actualizar el precio tomando el último movimiento válido restante en el historial del producto
+            const movimientosRestantes = historialMovimientos.filter(m => (m.codigo || "").toUpperCase() === codigoProd);
+            if (movimientosRestantes.length > 0) {
+              const ultimoMov = movimientosRestantes[0]; // El primero tras el shift es el más reciente
+              if (ultimoMov.precio > 0) {
+                prod.precioBs = ultimoMov.precio;
+              }
+            }
 
             if (db && prod.idDoc) {
               await updateDoc(doc(db, "iapci_stock", prod.idDoc), {
@@ -1248,7 +1227,7 @@ function eliminarRegistro() {
           }
 
           actualizarTodo(codigoProd);
-          mostrarToast("🗑️ El último registro fue enviado a la papelera y los precios y stock se recalcularon correctamente.", "success");
+          mostrarToast("🗑️ El último registro fue enviado a la papelera y el stock se restauró correctamente.", "success");
 
         } catch (err) {
           console.error("Error al eliminar registro:", err);
