@@ -1384,17 +1384,7 @@ function renderReporteGeneral() {
       tbodyCat.appendChild(tr);
     }
 
-    const trTotal = document.createElement("tr");
-    trTotal.style.cssText = "font-weight: bold; background-color: #f8f9fa; border-top: 2px solid #dee2e6;";
-    trTotal.innerHTML = `
-      <td>TOTALES</td>
-      <td>${sumaCatProd}</td>
-      <td>${sumaCatStock.toLocaleString('es-VE')}</td>
-      <td>Bs.S ${sumaCatValor.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</td>
-      <td>-</td>
-    `;
-    tbodyCat.appendChild(trTotal);
-
+    // Fila "TOTALES" eliminada de la vista visible de la tabla, pero se conservan los cálculos abajo:
     if (document.getElementById("cat-total-productos")) document.getElementById("cat-total-productos").textContent = sumaCatProd;
     if (document.getElementById("cat-total-stock")) document.getElementById("cat-total-stock").textContent = sumaCatStock.toLocaleString('es-VE');
     if (document.getElementById("cat-total-valor")) document.getElementById("cat-total-valor").textContent = `Bs.S ${sumaCatValor.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`;
