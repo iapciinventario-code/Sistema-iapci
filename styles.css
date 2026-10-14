@@ -118,7 +118,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .subtitulo-reporte { text-align: center; color: #94a3b8; font-style: italic; margin-bottom: 15px; font-size: 0.9rem; }
 .cards-grid-top { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 15px; }
 .card-reporte { padding: 15px; border-radius: 6px; border: 1px solid #334155; text-align: center; }
-.card-blue { background-color: #092040; }
+.card-blue { background-color: #004666; }
 .card-brown { background-color: #4a1505; }
 .card-darkblue { background-color: #0f172a; }
 
