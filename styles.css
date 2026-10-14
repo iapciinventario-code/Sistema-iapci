@@ -47,9 +47,9 @@ header { display: flex; justify-content: space-between; align-items: center; pad
 .contenedor { padding: 20px; }
 
 /* TASA DEL DÍA */
-.bloque-tasa { display: flex; align-items: center; gap: 12px; background: #1e293b; padding: 10px 15px; border-radius: 6px; margin-bottom: 15px; border: 1px solid #ffffff; }
-.bloque-tasa label { font-weight: bold; font-size: 0.85rem; color: #60a5fa; }
-.bloque-tasa input { width: 90px; padding: 6px; border-radius: 4px; border: 1px solid #334155; background: #ffffff !important; color: white !important; font-weight: bold; text-align: center; color-scheme: #000000; }
+.bloque-tasa { display: flex; align-items: center; gap: 12px; background: #ffffff; padding: 10px 15px; border-radius: 6px; margin-bottom: 15px; border: 1px solid #93c5fd; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+.bloque-tasa label { font-weight: bold; font-size: 0.85rem; color: #1d4ed8; }
+.bloque-tasa input { width: 90px; padding: 6px; border-radius: 4px; border: 1px solid #cbd5e1; background: #ffffff !important; color: #000000 !important; font-weight: bold; text-align: center; color-scheme: light; }
 .badge-tasa { background-color: #059669; color: #ffffff; font-weight: bold; padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; }
 
 /* FORMULARIO Y BOTONES */
