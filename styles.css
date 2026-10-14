@@ -139,20 +139,26 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .sec-titulo { font-weight: bold; font-size: 0.85rem; color: #cbd5e1; margin-bottom: 12px; background: #0b1120; padding: 8px; border-radius: 4px; }
 
 /* impresion de reporte general */
+/* impresion de reporte general corregida */
 @media print {
     body * {
         visibility: hidden;
     }
-    #reporte-general-container, #reporte-general-container * {
+    
+    /* Muestra únicamente la vista del reporte general real */
+    #vista-reporte, #vista-reporte * {
         visibility: visible;
     }
-    #reporte-general-container {
+    
+    #vista-reporte {
         position: absolute;
         left: 0;
         top: 0;
         width: 100%;
     }
-    .btn-imprimir {
-        display: none;
+    
+    /* Oculta botones o elementos innecesarios al imprimir */
+    .btn-imprimir, button {
+        display: none !important;
     }
 }
