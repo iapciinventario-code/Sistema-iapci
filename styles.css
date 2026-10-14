@@ -16,7 +16,7 @@ body {
 .logo-iapci-container { display: flex; align-items: center; gap: 12px; }
 .logo-iapci-textos { display: flex; flex-direction: column; justify-content: center; }
 .logo-title { font-size: 1.8rem; font-weight: 800; letter-spacing: 2px; margin: 0; color: #1e3a8a; line-height: 1; }
-.logo-subtitle { font-size: 0.65rem; color: #ffffff; margin: 2px 0 0 0; line-height: 1.2; white-space: nowrap; }
+.logo-subtitle { font-size: 0.65rem; color: #3a4972; margin: 2px 0 0 0; line-height: 1.2; white-space: nowrap; }
 
 /* LOGIN */
 .login-container { display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #dbeafe; }
