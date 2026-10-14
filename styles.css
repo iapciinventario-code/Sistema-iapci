@@ -96,7 +96,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .sub-barra-excel { font-size: 0.8rem; color: #38bdf8; margin-bottom: 12px; font-style: italic; }
 .tabla-inventario { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .tabla-inventario th, .tabla-inventario td { padding: 9px 12px; border-bottom: 1px solid #cbd5e1; text-align: left; }
-.tabla-inventario th { background-color: #0b1120; color: #94a3b8; font-weight: 600; }
+.tabla-inventario th { background-color: #01193D; color: #94a3b8; font-weight: 600; }
 
 /* Filas alternadas: Blanco y Azul Grisáceo Claro (#f1f5f9) con texto negro */
 .tabla-inventario tbody tr:nth-child(odd) {
