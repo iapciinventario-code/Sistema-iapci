@@ -108,7 +108,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   color: #000000;
 }
 
-.fila-total { background-color: #0b1120; font-weight: bold; color: #38bdf8; }
+.fila-total { background-color: #0b1120; font-weight: bold; color: #ffffff; }
 
 .badge-buen { background-color: #065f46; color: #34d399; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; }
 .badge-agotado { background-color: #991b1b; color: #fca5a5; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; }
