@@ -30,7 +30,7 @@ body {
 .error { color: #dc2626; font-size: 0.85rem; margin-top: 10px; }
 
 /* HEADER */
-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 25px; background-color: #ffffff; border-bottom: 2px solid #cbd5e1; box-shadow: 0 2px 4px rgba(0,0,0,0.03); }
+header { display: flex; justify-content: space-between; align-items: center; padding: 12px 25px; background-color: #333c87; border-bottom: 2px solid #cbd5e1; box-shadow: 0 2px 4px rgba(0,0,0,0.03); }
 .header-branding { display: flex; align-items: center; gap: 30px; }
 .logo-header { display: flex; align-items: center; }
 .header-titulo-sistema { display: flex; align-items: center; gap: 10px; }
