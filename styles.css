@@ -135,7 +135,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .status-sub { font-size: 0.65rem; opacity: 0.8; }
 
 .grid-reporte-tablas { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-.panel-reporte-sec { background: #0f172a; padding: 15px; border-radius: 6px; border: 1px solid #1e293b; }
+.panel-reporte-sec { background: #0f172a; padding: 15px; border-radius: 6px; border: 1px solid #5c698f; }
 .sec-titulo { font-weight: bold; font-size: 0.85rem; color: #cbd5e1; margin-bottom: 12px; background: #0b1120; padding: 8px; border-radius: 4px; }
 
 /* impresion de reporte general */
