@@ -92,11 +92,22 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .btn-darkblue { background-color: #1e1b4b; }
 .btn-darkblue:hover { background-color: #312e81; }
 
-/* TABLAS */
+/* TABLAS Y FILAS ALTERNADAS EN ESTATUS Y STOCK */
 .sub-barra-excel { font-size: 0.8rem; color: #38bdf8; margin-bottom: 12px; font-style: italic; }
 .tabla-inventario { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-.tabla-inventario th, .tabla-inventario td { padding: 9px 12px; border-bottom: 1px solid #1e293b; text-align: left; }
+.tabla-inventario th, .tabla-inventario td { padding: 9px 12px; border-bottom: 1px solid #cbd5e1; text-align: left; }
 .tabla-inventario th { background-color: #0b1120; color: #94a3b8; font-weight: 600; }
+
+/* Filas alternadas: Blanco y Azul Grisáceo Claro (#f1f5f9) con texto negro */
+.tabla-inventario tbody tr:nth-child(odd) {
+  background-color: #ffffff;
+  color: #000000;
+}
+.tabla-inventario tbody tr:nth-child(even) {
+  background-color: #f1f5f9;
+  color: #000000;
+}
+
 .fila-total { background-color: #0b1120; font-weight: bold; color: #38bdf8; }
 
 .badge-buen { background-color: #065f46; color: #34d399; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; }
