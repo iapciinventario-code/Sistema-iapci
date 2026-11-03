@@ -703,10 +703,10 @@ function aplicarFiltrosStock() {
   filtrosStockActivos = {
     fecha: document.getElementById("filtro-fecha")?.value.trim().toLowerCase() || "",
     codigo: document.getElementById("filtro-codigo")?.value.trim().toLowerCase() || "",
-    descripcion: document.getElementById("filtro-descripcion")?.value.trim().toLowerCase() || "",
+   
     categoria: document.getElementById("filtro-categoria")?.value.trim().toUpperCase() || "",
     pasillo: document.getElementById("filtro-pasillo")?.value.trim() || "",
-    und: document.getElementById("filtro-und")?.value.trim().toLowerCase() || ""
+    
   };
 
   renderTablaStock();
