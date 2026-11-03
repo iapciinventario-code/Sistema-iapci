@@ -60,8 +60,114 @@ canalSincronizacion.onmessage = function (event) {
       renderTablaHistorial();
       renderReporteGeneral();
     }
+  } else if (mensaje.tipo === "SOLICITUD_PERMISO_FECHA") {
+    // Si el usuario actual es Administrador o Soporte Técnico, mostrar la alerta de aprobación
+    if (usuarioActual && (usuarioActual.rol === "Administrador" || usuarioActual.rol === "Soporte Técnico")) {
+      solicitarConfirmacion(
+        `🔔 El usuario Asistente (${mensaje.remitente}) está solicitando permiso para modificar la fecha de registro.\n\n¿Desea otorgarle acceso por 1 minuto?`,
+        () => {
+          // Notificar al asistente que fue aceptado
+          try {
+            canalSincronizacion.postMessage({ tipo: "PERMISO_FECHA_APROBADO" });
+          } catch (e) {
+            console.error(e);
+          }
+          mostrarToast("✅ Ha otorgado el permiso de fecha al asistente por 1 minuto.", "success");
+        }
+      );
+    }
+  } else if (mensaje.tipo === "PERMISO_FECHA_APROBADO") {
+    // Si el usuario actual es el asistente, activar el permiso temporal
+    if (usuarioActual && usuarioActual.rol === "Asistente") {
+      concederPermisoTemporalFecha();
+    }
   }
 };
+
+// ==========================================
+// MÓDULO DE GESTIÓN DE PERMISOS DE FECHA EN TIEMPO REAL
+// ==========================================
+
+// 1. Verificar y aplicar restricciones iniciales al cargar la sesión o cambiar de pestaña
+function aplicarRestriccionesFechaRegistro() {
+  const inputFecha = document.getElementById("f-fecha");
+  if (!inputFecha) return;
+
+  // Por defecto, asignar la fecha actual de la computadora
+  inputFecha.value = new Date().toLocaleDateString();
+
+  if (usuarioActual) {
+    if (usuarioActual.rol === "Administrador" || usuarioActual.rol === "Soporte Técnico") {
+      inputFecha.disabled = false;
+      inputFecha.style.backgroundColor = "#ffffff";
+      removerBotonSolicitudAsistente();
+    } else if (usuarioActual.rol === "Asistente") {
+      inputFecha.disabled = true;
+      inputFecha.style.backgroundColor = "#e9ecef";
+      crearBotonSolicitudAsistente();
+    }
+  }
+}
+
+// 2. Crear el botón de solicitud exclusivamente para el Asistente
+function crearBotonSolicitudAsistente() {
+  const inputFecha = document.getElementById("f-fecha");
+  if (!inputFecha) return;
+
+  let contenedorPadre = inputFecha.parentNode;
+  if (!document.getElementById("btn-solicitar-fecha")) {
+    const wrapperBtn = document.createElement("div");
+    wrapperBtn.id = "contenedor-solicitud-fecha";
+    wrapperBtn.style.cssText = "margin-top: 5px;";
+    wrapperBtn.innerHTML = `
+      <button id="btn-solicitar-fecha" onclick="enviarSolicitudPermisoFecha()" style="background: #f39c12; color: white; border: none; padding: 5px 10px; border-radius: 4px; font-size: 11px; font-weight: bold; cursor: pointer;">
+        🔔 Solicitud de cambio de fecha
+      </button>
+    `;
+    contenedorPadre.appendChild(wrapperBtn);
+  }
+}
+
+// 3. Remover el botón si no es asistente
+function removerBotonSolicitudAsistente() {
+  const contenedorBtn = document.getElementById("contenedor-solicitud-fecha");
+  if (contenedorBtn) {
+    contenedorBtn.remove();
+  }
+}
+
+// 4. El asistente envía la solicitud (Sincronizado por BroadcastChannel / Firestore)
+function enviarSolicitudPermisoFecha() {
+  mostrarToast("📤 Solicitud de cambio de fecha enviada al Administrador...", "info");
+
+  try {
+    canalSincronizacion.postMessage({
+      tipo: "SOLICITUD_PERMISO_FECHA",
+      remitente: sessionStorage.getItem("iapci_usuario_activo_nombre") || "Asistente",
+      timestamp: Date.now()
+    });
+  } catch (e) {
+    console.error("Error al enviar solicitud por canal:", e);
+  }
+}
+
+// 5. Otorgar permiso temporal de 1 minuto (Activado por el Admin)
+function concederPermisoTemporalFecha() {
+  const inputFecha = document.getElementById("f-fecha");
+  if (inputFecha) {
+    inputFecha.disabled = false;
+    inputFecha.style.backgroundColor = "#fff3cd"; // Color alerta sutil indicando edición temporal
+    mostrarToast("✅ ¡Su solicitud ha sido aceptada! Puede modificar la fecha durante 1 minuto.", "success");
+
+    // Temporizador de 1 minuto (60000 ms)
+    setTimeout(() => {
+      inputFecha.disabled = true;
+      inputFecha.style.backgroundColor = "#e9ecef";
+      inputFecha.value = new Date().toLocaleDateString();
+      mostrarToast("⚠️ El tiempo de modificación de fecha ha expirado. El campo se ha bloqueado nuevamente.", "warning");
+    }, 60000);
+  }
+}
 
 function imprimirReporte() {
   cambiarPestana('reporte');
@@ -197,8 +303,11 @@ async function cargarDatosDesdeFirebase() {
       document.getElementById("pantalla-sistema")?.classList.remove("oculto");
       const rolLbl = document.getElementById("rol-usuario-lbl");
       if (rolLbl) rolLbl.textContent = `Usuario: ${usuarioGuardado.toUpperCase()} (${usuarioActual.rol})`;
+      
       const fFecha = document.getElementById("f-fecha");
       if (fFecha) fFecha.value = new Date().toLocaleDateString();
+      
+      aplicarRestriccionesFechaRegistro();
       
       const inputTasaElem = document.getElementById("f-tasa-cambio");
       if (inputTasaElem) inputTasaElem.value = tasaCambioBCV;
@@ -370,8 +479,11 @@ function iniciarSesion() {
     document.getElementById("pantalla-sistema")?.classList.remove("oculto");
     const rolLbl = document.getElementById("rol-usuario-lbl");
     if (rolLbl) rolLbl.textContent = `Usuario: ${userInput.toUpperCase()} (${usuarioActual.rol})`;
+    
     const fFecha = document.getElementById("f-fecha");
     if (fFecha) fFecha.value = new Date().toLocaleDateString();
+    
+    aplicarRestriccionesFechaRegistro();
     
     const inputTasaElem = document.getElementById("f-tasa-cambio");
     if (inputTasaElem) inputTasaElem.value = tasaCambioBCV;
@@ -453,6 +565,7 @@ function cambiarPestana(pestana) {
   if (pestana === 'registro') {
     vRegistro?.classList.remove("oculto");
     tRegistro?.classList.add("activa");
+    aplicarRestriccionesFechaRegistro();
   } else if (pestana === 'stock') {
     renderTablaStock();
     vStock?.classList.remove("oculto");
@@ -580,10 +693,39 @@ function renderTablaStock(codigoResaltar = null) {
 
   let totalInic = 0, totalEntradas = 0, totalSalidas = 0, totalStockActual = 0, valorTotalDisponibleBs = 0;
 
-  inventario.forEach((prod, index) => {
+  const inventarioOrdenado = [...inventario].sort((a, b) => {
+    const codA = (a.codigo || "").toUpperCase();
+    const codB = (b.codigo || "").toUpperCase();
+
+    const movA = historialMovimientos.find(m => (m.codigo || "").toUpperCase() === codA);
+    const movB = historialMovimientos.find(m => (m.codigo || "").toUpperCase() === codB);
+
+    const fechaStrA = movA ? movA.fecha : (a.fechaModificacion || "01/01/2000");
+    const fechaStrB = movB ? movB.fecha : (b.fechaModificacion || "01/01/2000");
+
+    const convertirFecha = (str) => {
+      const partes = str.split("/");
+      if (partes.length === 3) {
+        return new Date(partes[2], partes[1] - 1, partes[0]);
+      }
+      return new Date(str);
+    };
+
+    const timeA = convertirFecha(fechaStrA).getTime();
+    const timeB = convertirFecha(fechaStrB).getTime();
+
+    return timeB - timeA;
+  });
+
+  inventarioOrdenado.forEach((prod) => {
+    const index = inventario.findIndex(p => p.codigo === prod.codigo);
+
     const stockActual = prod.stockInic + prod.entradas - prod.salidas;
     const valorDisponibleBs = stockActual * prod.precioBs;
-    const fechaMod = prod.fechaModificacion || new Date().toLocaleDateString();
+    
+    const codigoProd = (prod.codigo || "").toUpperCase();
+    const movimientoReciente = historialMovimientos.find(m => (m.codigo || "").toUpperCase() === codigoProd);
+    const fechaMod = movimientoReciente ? movimientoReciente.fecha : (prod.fechaModificacion || new Date().toLocaleDateString());
     
     const stockMinVal = prod.stockMin !== undefined ? prod.stockMin : 100;
     let estado = "Buen Nivel";
@@ -611,7 +753,9 @@ function renderTablaStock(codigoResaltar = null) {
       tr.style.fontWeight = "bold";
     }
 
+    // 🔄 ORDEN CAMBIADO: La fecha (fechaMod) se coloca de primera a la izquierda
     tr.innerHTML = `
+      <td>${fechaMod}</td>
       <td>${prod.codigo}</td>
       <td>${prod.descripcion}</td>
       <td>${prod.categoria}</td>
@@ -625,7 +769,6 @@ function renderTablaStock(codigoResaltar = null) {
       <td>Bs.S ${valorDisponibleBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</td>
       <td>${stockMinVal}</td>
       <td><span class="${claseBadge}">${estado}</span></td>
-      <td>${fechaMod}</td>
       <td>${prod.obs || '-'}</td>
       <td><button onclick="modificarStockFila(${index})" style="background:#007bff; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">Editar</button></td>
     `;
@@ -777,7 +920,9 @@ async function modificarStockFila(index) {
     prod.precioBs = nuevoPrecio;
     prod.stockMin = nuevoStockMin;
     prod.obs = nuevaObs;
-    prod.fechaModificacion = new Date().toLocaleDateString();
+    
+    const inputFechaElem = document.getElementById("f-fecha");
+    prod.fechaModificacion = inputFechaElem ? inputFechaElem.value : new Date().toLocaleDateString();
 
     inventario[index] = prod;
 
@@ -842,6 +987,8 @@ function nuevoProducto() {
     const undElem = document.getElementById("f-und");
     const precioElem = document.getElementById("f-precio");
     const cantElem = document.getElementById("f-cantidad");
+    const fechaElem = document.getElementById("f-fecha");
+    const stockMinElem = document.getElementById("f-stock-min"); // 👈 Capturamos el elemento de stock mínimo
 
     const codigo = codigoElem ? codigoElem.value.trim().toUpperCase() : "";
     const descripcion = descElem ? descElem.value.trim().toUpperCase() : "";
@@ -850,6 +997,10 @@ function nuevoProducto() {
     const und = undElem ? undElem.value.trim() : "";
     const precioVal = precioElem ? precioElem.value.trim() : "";
     const cantVal = cantElem ? cantElem.value.trim() : "";
+    const fechaPersonalizada = fechaElem ? fechaElem.value.trim() : new Date().toLocaleDateString();
+    
+    // 👈 Tomamos el valor ingresado por el usuario; si está vacío, usamos 100 por defecto
+    const stockMinInput = stockMinElem && stockMinElem.value.trim() !== "" ? parseInt(stockMinElem.value) : 100;
 
     if (!cantVal) {
       mostrarToast("⚠️ El campo 'Cantidad (Entrada/Salida)' es obligatorio para registrar un nuevo producto.", "warning");
@@ -884,8 +1035,7 @@ function nuevoProducto() {
     const pasillo = parseInt(pasilloVal) || 0;
     const precioBs = parseFloat(precioVal) || 0;
     const cantInic = parseInt(cantVal) || 0;
-    const stockMinInput = parseInt(document.getElementById("f-stock-min")?.value) || 100;
-    const obs = document.getElementById("f-observacion")?.value.trim() || `Nuevo producto ${new Date().toLocaleDateString()}`;
+    const obs = document.getElementById("f-observacion")?.value.trim() || `Nuevo producto ${fechaPersonalizada}`;
 
     if (cantInic <= 0) {
       mostrarToast("⚠️ La cantidad ingresada debe ser mayor a 0.", "warning");
@@ -907,14 +1057,23 @@ function nuevoProducto() {
       return;
     }
 
-    const fechaActualStr = new Date().toLocaleDateString();
-
     const nuevoProdObj = {
-      codigo, descripcion, categoria, pasillo, und, precioBs, stockInic: cantInic, entradas: 0, salidas: 0, stockMin: stockMinInput, obs, fechaModificacion: fechaActualStr
+      codigo, 
+      descripcion, 
+      categoria, 
+      pasillo, 
+      und, 
+      precioBs, 
+      stockInic: cantInic, 
+      entradas: 0, 
+      salidas: 0, 
+      stockMin: stockMinInput, // 👈 Se guarda el valor personalizado introducido
+      obs, 
+      fechaModificacion: fechaPersonalizada
     };
 
     const nuevoHistObj = {
-      fecha: fechaActualStr, codigo, producto: descripcion, categoria, pasillo, und, precio: precioBs, entrada: cantInic, salida: 0, observacion: obs, timestamp: Date.now()
+      fecha: fechaPersonalizada, codigo, producto: descripcion, categoria, pasillo, und, precio: precioBs, entrada: cantInic, salida: 0, observacion: obs, timestamp: Date.now()
     };
 
     if (db) {
@@ -968,6 +1127,8 @@ async function registrarEntrada() {
   const cant = parseInt(document.getElementById("f-cantidad").value) || 0;
   const precioNuevo = parseFloat(document.getElementById("f-precio").value) || 0;
   const obs = document.getElementById("f-observacion").value.trim() || "REPOSICIÓN";
+  const fechaElem = document.getElementById("f-fecha");
+  const fechaPersonalizada = fechaElem ? fechaElem.value.trim() : new Date().toLocaleDateString();
   const prod = inventario.find(p => p.codigo.toUpperCase() === codigo);
 
   if (prod && cant > 0) {
@@ -976,10 +1137,9 @@ async function registrarEntrada() {
       nuevoPrecioBs = (prod.precioBs + precioNuevo) / 2;
     }
     const nuevasEntradas = prod.entradas + cant;
-    const fechaActualStr = new Date().toLocaleDateString();
 
     const nuevoMovimiento = {
-      fecha: fechaActualStr, 
+      fecha: fechaPersonalizada, 
       codigo: prod.codigo, 
       producto: prod.descripcion, 
       categoria: prod.categoria, 
@@ -992,21 +1152,21 @@ async function registrarEntrada() {
       timestamp: Date.now()
     };
 
-    prod.entradas = nuevasEntradas;
-    prod.precioBs = nuevoPrecioBs;
-    prod.fechaModificacion = fechaActualStr;
+    prod.fechaModificacion = fechaPersonalizada;
 
     if (db && prod.idDoc) {
       await updateDoc(doc(db, "iapci_stock", prod.idDoc), {
         precioBs: nuevoPrecioBs,
         entradas: nuevasEntradas,
-        fechaModificacion: fechaActualStr
+        fechaModificacion: fechaPersonalizada
       });
 
       const docRefHist = await addDoc(collection(db, "iapci_historial"), nuevoMovimiento);
       nuevoMovimiento.idDoc = docRefHist.id;
     }
     
+    prod.entradas = nuevasEntradas;
+    prod.precioBs = nuevoPrecioBs;
     historialMovimientos.unshift(nuevoMovimiento);
     actualizarTodo(null, 0);
 
@@ -1024,6 +1184,8 @@ async function registrarSalida() {
   const cant = parseInt(cantInputElem?.value) || 0;
   const precio = parseFloat(document.getElementById("f-precio").value) || 0;
   const obs = document.getElementById("f-observacion").value.trim() || "VENTA";
+  const fechaElem = document.getElementById("f-fecha");
+  const fechaPersonalizada = fechaElem ? fechaElem.value.trim() : new Date().toLocaleDateString();
   const prod = inventario.find(p => p.codigo.toUpperCase() === codigo);
 
   if (!prod) {
@@ -1070,10 +1232,9 @@ async function registrarSalida() {
 
   const nuevasSalidas = prod.salidas + cant;
   const nuevoPrecioBs = precio > 0 ? precio : prod.precioBs;
-  const fechaActualStr = new Date().toLocaleDateString();
 
   const nuevoMovimiento = {
-    fecha: fechaActualStr, 
+    fecha: fechaPersonalizada, 
     codigo: prod.codigo, 
     producto: prod.descripcion, 
     categoria: prod.categoria, 
@@ -1086,21 +1247,21 @@ async function registrarSalida() {
     timestamp: Date.now()
   };
 
-  prod.salidas = nuevasSalidas;
-  prod.precioBs = nuevoPrecioBs;
-  prod.fechaModificacion = fechaActualStr;
+  prod.fechaModificacion = fechaPersonalizada;
 
   if (db && prod.idDoc) {
     await updateDoc(doc(db, "iapci_stock", prod.idDoc), {
       salidas: nuevasSalidas,
       precioBs: nuevoPrecioBs,
-      fechaModificacion: fechaActualStr
+      fechaModificacion: fechaPersonalizada
     });
 
     const docRefHist = await addDoc(collection(db, "iapci_historial"), nuevoMovimiento);
     nuevoMovimiento.idDoc = docRefHist.id;
   }
   
+  prod.salidas = nuevasSalidas;
+  prod.precioBs = nuevoPrecioBs;
   historialMovimientos.unshift(nuevoMovimiento);
   actualizarTodo(null, 0);
   
@@ -1270,6 +1431,8 @@ function limpiarFormulario() {
       elemento.style.boxShadow = "";
     }
   });
+  
+  aplicarRestriccionesFechaRegistro();
 }
 
 function renderReporteGeneral() {
@@ -1528,6 +1691,7 @@ async function restaurarRegistroPapelera(index) {
       if (prod) {
         if (movRestaurar.entrada > 0) {
           prod.entradas += movRestaurar.entrada;
+          
           if (movRestaurar.precio > 0) {
             prod.precioBs = (prod.precioBs + movRestaurar.precio) / 2;
           }
@@ -1587,6 +1751,7 @@ async function restaurarRegistroPapelera(index) {
     }
   });
 }
+
 async function eliminarSeleccionadosPapelera() {
   verificarPermisoAdmin(async () => {
     const seleccionados = Array.from(document.querySelectorAll('.chk-item-papelera:checked'))
@@ -1661,3 +1826,6 @@ window.vaciarPapelera = vaciarPapelera;
 window.imprimirReporte = imprimirReporte;
 window.validarYProcesarRegistro = validarYProcesarRegistro;
 window.limpiarFormulario = limpiarFormulario;
+window.aplicarRestriccionesFechaRegistro = aplicarRestriccionesFechaRegistro;
+window.enviarSolicitudPermisoFecha = enviarSolicitudPermisoFecha;
+window.concederPermisoTemporalFecha = concederPermisoTemporalFecha;
