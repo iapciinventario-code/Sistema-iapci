@@ -60,27 +60,6 @@ canalSincronizacion.onmessage = function (event) {
       renderTablaHistorial();
       renderReporteGeneral();
     }
-  } else if (mensaje.tipo === "SOLICITUD_PERMISO_FECHA") {
-    // Si el usuario actual es Administrador o Soporte Técnico, mostrar la alerta de aprobación
-    if (usuarioActual && (usuarioActual.rol === "Administrador" || usuarioActual.rol === "Soporte Técnico")) {
-      solicitarConfirmacion(
-        `🔔 El usuario Asistente (${mensaje.remitente}) está solicitando permiso para modificar la fecha de registro.\n\n¿Desea otorgarle acceso por 1 minuto?`,
-        () => {
-          // Notificar al asistente que fue aceptado
-          try {
-            canalSincronizacion.postMessage({ tipo: "PERMISO_FECHA_APROBADO" });
-          } catch (e) {
-            console.error(e);
-          }
-          mostrarToast("✅ Ha otorgado el permiso de fecha al asistente por 1 minuto.", "success");
-        }
-      );
-    }
-  } else if (mensaje.tipo === "PERMISO_FECHA_APROBADO") {
-    // Si el usuario actual es el asistente, activar el permiso temporal
-    if (usuarioActual && usuarioActual.rol === "Asistente") {
-      concederPermisoTemporalFecha();
-    }
   }
 };
 
@@ -136,29 +115,62 @@ function removerBotonSolicitudAsistente() {
   }
 }
 
-// 4. El asistente envía la solicitud (Sincronizado por BroadcastChannel / Firestore)
+// 4. El asistente hace clic en solicitar y se valida directamente con la clave del Administrador
 function enviarSolicitudPermisoFecha() {
-  mostrarToast("📤 Solicitud de cambio de fecha enviada al Administrador...", "info");
+  if (!usuarioActual || usuarioActual.rol !== "Asistente") return;
 
-  try {
-    canalSincronizacion.postMessage({
-      tipo: "SOLICITUD_PERMISO_FECHA",
-      remitente: sessionStorage.getItem("iapci_usuario_activo_nombre") || "Asistente",
-      timestamp: Date.now()
-    });
-  } catch (e) {
-    console.error("Error al enviar solicitud por canal:", e);
-  }
+  // Buscar la clave real del Administrador configurada en el sistema
+  let adminKey = Object.keys(usuarios).find(u => usuarios[u].rol === "Administrador");
+  let passAdminReal = adminKey ? usuarios[adminKey].clave : "admin123";
+
+  // Crear un overlay para solicitar la clave de admin directamente al asistente
+  const overlay = document.createElement("div");
+  overlay.style.cssText = "position: fixed; top:0; left:0; width:100vw; height:100vh; background: rgba(0,0,0,0.5); display:flex; justify-content:center; align-items:center; z-index: 999999;";
+  
+  const box = document.createElement("div");
+  box.style.cssText = "background: white; padding: 24px; border-radius: 8px; max-width: 360px; width: 90%; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.3); font-family: sans-serif;";
+  
+  box.innerHTML = `
+    <h3 style="margin-top:0; color:#2c3e50; font-size: 15px;">🔒 Permiso de Cambio de Fecha</h3>
+    <p style="font-size: 12px; color:#666;">Introduzca la clave del Administrador para autorizar el cambio por 1 minuto:</p>
+    <input type="password" id="input-clave-admin-permiso" style="width: 100%; padding: 8px; box-sizing: border-box; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px;" placeholder="Clave de administrador">
+    <div style="display:flex; gap:10px; justify-content:center;">
+      <button id="btn-val-permiso" style="background:#27ae60; color:white; border:none; padding:8px 16px; border-radius:4px; font-weight:bold; cursor:pointer;">Autorizar</button>
+      <button id="btn-canc-permiso" style="background:#95a5a6; color:white; border:none; padding:8px 16px; border-radius:4px; font-weight:bold; cursor:pointer;">Cancelar</button>
+    </div>
+  `;
+
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  const inputPass = box.querySelector("#input-clave-admin-permiso");
+  inputPass.focus();
+
+  box.querySelector("#btn-val-permiso").onclick = () => {
+    const val = inputPass.value;
+    document.body.removeChild(overlay);
+    
+    if (val === passAdminReal) {
+      // Si la clave es correcta, se concede el permiso temporal de 1 minuto
+      concederPermisoTemporalFecha();
+      mostrarToast("✅ Administrador verificado. Permiso concedido por 1 minuto.", "success");
+    } else {
+      mostrarToast("❌ Clave de administrador incorrecta. No se otorgó el permiso.", "error");
+    }
+  };
+
+  box.querySelector("#btn-canc-permiso").onclick = () => {
+    document.body.removeChild(overlay);
+  };
 }
 
-// 5. Otorgar permiso temporal de 1 minuto (Activado por el Admin)
+// 5. Otorgar permiso temporal de 1 minuto
 function concederPermisoTemporalFecha() {
   const inputFecha = document.getElementById("f-fecha");
   if (inputFecha) {
     inputFecha.disabled = false;
     inputFecha.style.backgroundColor = "#fff3cd"; // Color alerta sutil indicando edición temporal
-    mostrarToast("✅ ¡Su solicitud ha sido aceptada! Puede modificar la fecha durante 1 minuto.", "success");
-
+    
     // Temporizador de 1 minuto (60000 ms)
     setTimeout(() => {
       inputFecha.disabled = true;
@@ -1058,7 +1070,7 @@ function nuevoProducto() {
     const precioElem = document.getElementById("f-precio");
     const cantElem = document.getElementById("f-cantidad");
     const fechaElem = document.getElementById("f-fecha");
-    const stockMinElem = document.getElementById("f-stock-min"); // 👈 Capturamos el elemento de stock mínimo
+    const stockMinElem = document.getElementById("f-stock-min");
 
     const codigo = codigoElem ? codigoElem.value.trim().toUpperCase() : "";
     const descripcion = descElem ? descElem.value.trim().toUpperCase() : "";
@@ -1069,7 +1081,6 @@ function nuevoProducto() {
     const cantVal = cantElem ? cantElem.value.trim() : "";
     const fechaPersonalizada = fechaElem ? fechaElem.value.trim() : new Date().toLocaleDateString();
     
-    // 👈 Tomamos el valor ingresado por el usuario; si está vacío, usamos 100 por defecto
     const stockMinInput = stockMinElem && stockMinElem.value.trim() !== "" ? parseInt(stockMinElem.value) : 100;
 
     if (!cantVal) {
@@ -1137,7 +1148,7 @@ function nuevoProducto() {
       stockInic: cantInic, 
       entradas: 0, 
       salidas: 0, 
-      stockMin: stockMinInput, // 👈 Se guarda el valor personalizado introducido
+      stockMin: stockMinInput,
       obs, 
       fechaModificacion: fechaPersonalizada
     };
@@ -1175,7 +1186,6 @@ function buscarCodigo() {
     document.getElementById("f-codigo").value = prod.codigo;
     document.getElementById("f-producto").value = prod.descripcion;
     
-    // Asignar el valor al selector de categoría de forma segura
     const catSelect = document.getElementById("f-categoria");
     if (catSelect) {
       catSelect.value = prod.categoria || "";
@@ -1394,7 +1404,6 @@ function renderTablaHistorial(indiceResaltar = null) {
 
   let sumaEntradas = 0, sumaSalidas = 0, sumaMontoTotalBs = 0, sumaMontoTotalUsd = 0;
 
-  // 🔍 Filtrar historial si hay filtros activos
   let historialFiltrado = historialMovimientos.filter(mov => {
     if (!filtrosHistorialActivos) return true;
 
@@ -1569,7 +1578,6 @@ function limpiarFormulario() {
     }
   });
 
-  // Limpiar específicamente el selector de categoría
   const catSelect = document.getElementById("f-categoria");
   if (catSelect) {
     catSelect.value = "";
