@@ -179,5 +179,5 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 
 /* Excepción exclusiva para el campo de la tasa del día, reduciendo su longitud (ancho) a la mitad */
 #f-tasa-cambio {
-  width: 25% !important;
+  width: 15% !important;
 }
