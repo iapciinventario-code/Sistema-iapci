@@ -826,7 +826,10 @@ async function modificarStockFila(index) {
         </div>
         <div>
           <label style="font-size:11px; font-weight:bold; color:#555; display:block; margin-bottom:3px;">Categoría:</label>
-          <input type="text" id="ed-cat" value="${prod.categoria || ''}" style="width:100%; padding:6px; box-sizing:border-box; border:1px solid #ccc; border-radius:4px; font-size:12px;">
+          <select id="ed-cat" style="width:100%; padding:6px; box-sizing:border-box; border:1px solid #ccc; border-radius:4px; font-size:12px;">
+            <option value="Exento" ${prod.categoria === 'Exento' ? 'selected' : ''}>Exento</option>
+            <option value="Gravable" ${prod.categoria === 'Gravable' ? 'selected' : ''}>Gravable</option>
+          </select>
         </div>
       </div>
 
@@ -1104,7 +1107,13 @@ function buscarCodigo() {
   if (prod) {
     document.getElementById("f-codigo").value = prod.codigo;
     document.getElementById("f-producto").value = prod.descripcion;
-    document.getElementById("f-categoria").value = prod.categoria;
+    
+    // Asignar el valor al selector de categoría de forma segura
+    const catSelect = document.getElementById("f-categoria");
+    if (catSelect) {
+      catSelect.value = prod.categoria || "";
+    }
+
     document.getElementById("f-pasillo").value = prod.pasillo;
     document.getElementById("f-und").value = prod.und;
     if (document.getElementById("f-stock-min")) {
@@ -1413,7 +1422,6 @@ function limpiarFormulario() {
   const camposIds = [
     "f-codigo",
     "f-producto",
-    "f-categoria",
     "f-pasillo",
     "f-und",
     "f-precio",
@@ -1431,6 +1439,14 @@ function limpiarFormulario() {
       elemento.style.boxShadow = "";
     }
   });
+
+  // Limpiar específicamente el selector de categoría
+  const catSelect = document.getElementById("f-categoria");
+  if (catSelect) {
+    catSelect.value = "";
+    catSelect.style.borderColor = "";
+    catSelect.style.backgroundColor = "";
+  }
   
   aplicarRestriccionesFechaRegistro();
 }
@@ -1718,7 +1734,7 @@ async function restaurarRegistroPapelera(index) {
         const nuevoProd = {
           codigo: movRestaurar.codigo,
           descripcion: movRestaurar.producto,
-          categoria: movRestaurar.categoria || "General",
+          categoria: movRestaurar.categoria || "Exento",
           pasillo: movRestaurar.pasillo || 0,
           und: movRestaurar.und || "UND",
           precioBs: movRestaurar.precio || 0,
