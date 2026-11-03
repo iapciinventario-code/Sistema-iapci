@@ -170,7 +170,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .vista-registro input[type="text"],
 .vista-registro input[type="number"],
 .vista-registro select {
-  width: 90%;
+  width: 85%;
   padding: 6px 8px;
   box-sizing: border-box;
   border: 1px solid #ccc;
