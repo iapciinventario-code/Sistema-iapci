@@ -77,11 +77,11 @@ function aplicarRestriccionesFechaRegistro() {
 
   if (usuarioActual) {
     if (usuarioActual.rol === "Administrador" || usuarioActual.rol === "Soporte Técnico") {
-      inputFecha.disabled = false;
+      inputFecha.readOnly = false; // 👈 Habilitar lectura/escritura directa para el Admin
       inputFecha.style.backgroundColor = "#ffffff";
       removerBotonSolicitudAsistente();
     } else if (usuarioActual.rol === "Asistente") {
-      inputFecha.disabled = true;
+      inputFecha.readOnly = true;  // 👈 Bloquear por defecto al asistente
       inputFecha.style.backgroundColor = "#e9ecef";
       crearBotonSolicitudAsistente();
     }
@@ -168,12 +168,12 @@ function enviarSolicitudPermisoFecha() {
 function concederPermisoTemporalFecha() {
   const inputFecha = document.getElementById("f-fecha");
   if (inputFecha) {
-    inputFecha.disabled = false;
+    inputFecha.readOnly = false; // 👈 Quitar el modo lectura de forma temporal
     inputFecha.style.backgroundColor = "#fff3cd"; // Color alerta sutil indicando edición temporal
     
     // Temporizador de 1 minuto (60000 ms)
     setTimeout(() => {
-      inputFecha.disabled = true;
+      inputFecha.readOnly = true;  // 👈 Volver a bloquear lectura
       inputFecha.style.backgroundColor = "#e9ecef";
       inputFecha.value = new Date().toLocaleDateString();
       mostrarToast("⚠️ El tiempo de modificación de fecha ha expirado. El campo se ha bloqueado nuevamente.", "warning");
