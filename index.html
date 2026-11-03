@@ -175,7 +175,7 @@ const db = firebase.firestore();
     <main class="contenedor">
 
       <!-- PESTAÑA 1: INTERFAZ DE REGISTRO -->
-      <div id="vista-registro">
+      <div id="vista-registro" class="vista-registro">
         <div class="grid-principal">
           <section class="panel-formulario">
             <h2>INTERFAZ DE REGISTRO</h2>
@@ -227,6 +227,56 @@ const db = firebase.firestore();
 
       <!-- PESTAÑA 2: ESTATUS Y STOCK -->
       <div id="vista-stock" class="oculto">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+          <h2>📊 Estatus y Stock de Inventario</h2>
+          
+          <!-- 👈 BOTÓN DE FILTRAR EN LA PARTE SUPERIOR DERECHA -->
+          <div style="position: relative;">
+            <button onclick="toggleModalFiltroStock()" style="background: #2980b9; color: white; border: none; padding: 8px 14px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; box-shadow: 0 2px 5px rgba(0,0,0,0.15);">
+              🔍 Filtrar lista
+            </button>
+          </div>
+        </div>
+
+        <!-- Contenedor o Modal de Opciones de Filtrado (Oculto por defecto) -->
+        <div id="modal-filtro-stock" class="oculto" style="border: 1px solid #ccc; padding: 15px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+          <h4 style="margin: 0 0 10px 0; font-size: 14px;">Filtrar inventario por:</h4>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 10px;">
+            <div>
+              <label style="font-size: 11px; font-weight: bold; display: block; margin-bottom: 2px;">Fecha:</label>
+              <input type="text" id="filtro-fecha" placeholder="Ej: 06/06/2026">
+            </div>
+            <div>
+              <label style="font-size: 11px; font-weight: bold; display: block; margin-bottom: 2px;">Código:</label>
+              <input type="text" id="filtro-codigo" placeholder="Ej: PROD01">
+            </div>
+            <div>
+              <label style="font-size: 11px; font-weight: bold; display: block; margin-bottom: 2px;">Descripción:</label>
+              <input type="text" id="filtro-descripcion" placeholder="Nombre o parte...">
+            </div>
+            <div>
+              <label style="font-size: 11px; font-weight: bold; display: block; margin-bottom: 2px;">Categoría:</label>
+              <select id="filtro-categoria">
+                <option value="">Todas</option>
+                <option value="EXENTO">EXENTO</option>
+                <option value="GRAVABLE">GRAVABLE</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size: 11px; font-weight: bold; display: block; margin-bottom: 2px;">Pasillo:</label>
+              <input type="number" id="filtro-pasillo" placeholder="Ej: 1">
+            </div>
+            <div>
+              <label style="font-size: 11px; font-weight: bold; display: block; margin-bottom: 2px;">Unidad (UND):</label>
+              <input type="text" id="filtro-und" placeholder="Ej: UND, KG...">
+            </div>
+          </div>
+          <div style="display: flex; gap: 10px; justify-content: flex-end;">
+            <button onclick="aplicarFiltrosStock()" style="background: #27ae60; color: white; border: none; padding: 6px 14px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px;">Aplicar Filtros</button>
+            <button onclick="limpiarFiltrosStock()" style="background: #95a5a6; color: white; border: none; padding: 6px 14px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px;">Limpiar / Ver Todo</button>
+          </div>
+        </div>
+
         <section class="seccion-tabla">
           <h2>ESTADO DE INVENTARIO VÍVERES Y CONSUMIBLES — Bolívares Venezolanos (Bs.S)</h2>
           <div class="sub-barra-excel">Control de Stock • Entradas y Salidas • Estado Automático de Existencias</div>
