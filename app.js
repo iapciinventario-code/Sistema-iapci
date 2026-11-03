@@ -580,11 +580,40 @@ function renderTablaStock(codigoResaltar = null) {
 
   let totalInic = 0, totalEntradas = 0, totalSalidas = 0, totalStockActual = 0, valorTotalDisponibleBs = 0;
 
-  inventario.forEach((prod, index) => {
+  // Creamos una copia del inventario para ordenarla por fecha de modificación/historial sin alterar el orden original en memoria
+  const inventarioOrdenado = [...inventario].sort((a, b) => {
+    const codA = (a.codigo || "").toUpperCase();
+    const codB = (b.codigo || "").toUpperCase();
+
+    const movA = historialMovimientos.find(m => (m.codigo || "").toUpperCase() === codA);
+    const movB = historialMovimientos.find(m => (m.codigo || "").toUpperCase() === codB);
+
+    const fechaStrA = movA ? movA.fecha : (a.fechaModificacion || "01/01/2000");
+    const fechaStrB = movB ? movB.fecha : (b.fechaModificacion || "01/01/2000");
+
+    // Función auxiliar para convertir formato de fecha DD/MM/YYYY a objeto Date para comparar correctamente
+    const convertirFecha = (str) => {
+      const partes = str.split("/");
+      if (partes.length === 3) {
+        return new Date(partes[2], partes[1] - 1, partes[0]);
+      }
+      return new Date(str);
+    };
+
+    const timeA = convertirFecha(fechaStrA).getTime();
+    const timeB = convertirFecha(fechaStrB).getTime();
+
+    // Orden descendente (de la más actual a la más antigua)
+    return timeB - timeA;
+  });
+
+  inventarioOrdenado.forEach((prod) => {
+    // Buscamos el índice real del producto en el inventario original para que los botones de "Editar" funcionen correctamente
+    const index = inventario.findIndex(p => p.codigo === prod.codigo);
+
     const stockActual = prod.stockInic + prod.entradas - prod.salidas;
     const valorDisponibleBs = stockActual * prod.precioBs;
     
-    // Buscar la última fecha registrada en el historial para este código de producto
     const codigoProd = (prod.codigo || "").toUpperCase();
     const movimientoReciente = historialMovimientos.find(m => (m.codigo || "").toUpperCase() === codigoProd);
     const fechaMod = movimientoReciente ? movimientoReciente.fecha : (prod.fechaModificacion || new Date().toLocaleDateString());
