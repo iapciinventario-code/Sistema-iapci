@@ -139,7 +139,6 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .sec-titulo { font-weight: bold; font-size: 0.85rem; color: #cbd5e1; margin-bottom: 12px; background: #0b1120; padding: 8px; border-radius: 4px; }
 
 /* impresion de reporte general */
-/* impresion de reporte general corregida */
 @media print {
     body * {
         visibility: hidden;
@@ -161,4 +160,17 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     .btn-imprimir, button {
         display: none !important;
     }
+}
+
+/* Asegura que el selector comparta los mismos estilos y tamaños que los inputs */
+.campo-formulario, input[type="text"], input[type="number"], select {
+  width: 100%;
+  padding: 6px 8px;
+  box-sizing: border-box;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 12px;
+  height: 30px;
+  background-color: #ffffff;
+  color: #333333;
 }
