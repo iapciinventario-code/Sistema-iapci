@@ -192,7 +192,14 @@ const db = firebase.firestore();
               <div class="form-group"><label>Fecha:</label><input type="text" id="f-fecha" readonly></div>
               <div class="form-group"><label>Código:</label><input type="text" id="f-codigo" placeholder="Ej: AAA-01"></div>
               <div class="form-group"><label>Producto:</label><input type="text" id="f-producto"></div>
-              <div class="form-group"><label>Categoría:</label><input type="text" id="f-categoria"></div>
+              <div class="form-group">
+                <label>Categoría:</label>
+                <select id="f-categoria" style="width: 100%; padding: 6px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 12px;">
+                  <option value="">Seleccione categoría...</option>
+                  <option value="Exento">Exento</option>
+                  <option value="Gravable">Gravable</option>
+                </select>
+              </div>
               <div class="form-group"><label>Pasillo:</label><input type="number" id="f-pasillo"></div>
               <div class="form-group"><label>Stock Mínimo:</label><input type="number" id="f-stock-min" value="100" placeholder="Ej: 100"></div>
             </div>
