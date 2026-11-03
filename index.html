@@ -312,8 +312,57 @@ const db = firebase.firestore();
 
       <!-- PESTAÑA 3: REGISTRO DE ENTRADAS Y SALIDAS -->
       <div id="vista-historial" class="oculto">
-        <section class="seccion-tabla">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
           <h2>INVENTARIO DE VÍVERES Y CONSUMIBLES — REGISTRO DE ENTRADAS Y SALIDAS</h2>
+          
+          <!-- 👈 BOTÓN DE FILTRAR EN LA PARTE SUPERIOR DERECHA -->
+          <div style="position: relative;">
+            <button onclick="toggleModalFiltroHistorial()" style="background: #2980b9; color: white; border: none; padding: 8px 14px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; box-shadow: 0 2px 5px rgba(0,0,0,0.15);">
+              🔍 Filtrar lista
+            </button>
+          </div>
+        </div>
+
+        <!-- Contenedor o Modal de Opciones de Filtrado para Historial (Oculto por defecto) -->
+        <div id="modal-filtro-historial" class="oculto" style="border: 1px solid #ccc; padding: 15px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); background: #ffffff;">
+          <h4 style="margin: 0 0 10px 0; font-size: 14px;">Filtrar registro por:</h4>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 10px;">
+            <div>
+              <label style="font-size: 11px; font-weight: bold; display: block; margin-bottom: 2px;">Fecha:</label>
+              <input type="text" id="filtro-hist-fecha" placeholder="Ej: 06/06/2026">
+            </div>
+            <div>
+              <label style="font-size: 11px; font-weight: bold; display: block; margin-bottom: 2px;">Código:</label>
+              <input type="text" id="filtro-hist-codigo" placeholder="Ej: PROD01">
+            </div>
+            <div>
+              <label style="font-size: 11px; font-weight: bold; display: block; margin-bottom: 2px;">Producto:</label>
+              <input type="text" id="filtro-hist-producto" placeholder="Nombre o parte...">
+            </div>
+            <div>
+              <label style="font-size: 11px; font-weight: bold; display: block; margin-bottom: 2px;">Categoría:</label>
+              <select id="filtro-hist-categoria">
+                <option value="">Todas</option>
+                <option value="EXENTO">EXENTO</option>
+                <option value="GRAVABLE">GRAVABLE</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size: 11px; font-weight: bold; display: block; margin-bottom: 2px;">Pasillo:</label>
+              <input type="number" id="filtro-hist-pasillo" placeholder="Ej: 1">
+            </div>
+            <div>
+              <label style="font-size: 11px; font-weight: bold; display: block; margin-bottom: 2px;">Unidad (UND):</label>
+              <input type="text" id="filtro-hist-und" placeholder="Ej: UND, KG...">
+            </div>
+          </div>
+          <div style="display: flex; gap: 10px; justify-content: flex-end;">
+            <button onclick="aplicarFiltrosHistorial()" style="background: #27ae60; color: white; border: none; padding: 6px 14px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px;">Aplicar Filtros</button>
+            <button onclick="limpiarFiltrosHistorial()" style="background: #95a5a6; color: white; border: none; padding: 6px 14px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px;">Limpiar / Ver Todo</button>
+          </div>
+        </div>
+
+        <section class="seccion-tabla">
           <table class="tabla-inventario tabla-historial">
             <thead>
               <tr>
