@@ -580,7 +580,6 @@ function renderTablaStock(codigoResaltar = null) {
 
   let totalInic = 0, totalEntradas = 0, totalSalidas = 0, totalStockActual = 0, valorTotalDisponibleBs = 0;
 
-  // Creamos una copia del inventario para ordenarla por fecha de modificación/historial sin alterar el orden original en memoria
   const inventarioOrdenado = [...inventario].sort((a, b) => {
     const codA = (a.codigo || "").toUpperCase();
     const codB = (b.codigo || "").toUpperCase();
@@ -591,7 +590,6 @@ function renderTablaStock(codigoResaltar = null) {
     const fechaStrA = movA ? movA.fecha : (a.fechaModificacion || "01/01/2000");
     const fechaStrB = movB ? movB.fecha : (b.fechaModificacion || "01/01/2000");
 
-    // Función auxiliar para convertir formato de fecha DD/MM/YYYY a objeto Date para comparar correctamente
     const convertirFecha = (str) => {
       const partes = str.split("/");
       if (partes.length === 3) {
@@ -603,12 +601,10 @@ function renderTablaStock(codigoResaltar = null) {
     const timeA = convertirFecha(fechaStrA).getTime();
     const timeB = convertirFecha(fechaStrB).getTime();
 
-    // Orden descendente (de la más actual a la más antigua)
     return timeB - timeA;
   });
 
   inventarioOrdenado.forEach((prod) => {
-    // Buscamos el índice real del producto en el inventario original para que los botones de "Editar" funcionen correctamente
     const index = inventario.findIndex(p => p.codigo === prod.codigo);
 
     const stockActual = prod.stockInic + prod.entradas - prod.salidas;
@@ -644,7 +640,9 @@ function renderTablaStock(codigoResaltar = null) {
       tr.style.fontWeight = "bold";
     }
 
+    // 🔄 ORDEN CAMBIADO: La fecha (fechaMod) se coloca de primera a la izquierda
     tr.innerHTML = `
+      <td>${fechaMod}</td>
       <td>${prod.codigo}</td>
       <td>${prod.descripcion}</td>
       <td>${prod.categoria}</td>
@@ -658,7 +656,6 @@ function renderTablaStock(codigoResaltar = null) {
       <td>Bs.S ${valorDisponibleBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</td>
       <td>${stockMinVal}</td>
       <td><span class="${claseBadge}">${estado}</span></td>
-      <td>${fechaMod}</td>
       <td>${prod.obs || '-'}</td>
       <td><button onclick="modificarStockFila(${index})" style="background:#007bff; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">Editar</button></td>
     `;
