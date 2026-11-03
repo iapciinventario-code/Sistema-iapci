@@ -583,7 +583,11 @@ function renderTablaStock(codigoResaltar = null) {
   inventario.forEach((prod, index) => {
     const stockActual = prod.stockInic + prod.entradas - prod.salidas;
     const valorDisponibleBs = stockActual * prod.precioBs;
-    const fechaMod = prod.fechaModificacion || new Date().toLocaleDateString();
+    
+    // Buscar la última fecha registrada en el historial para este código de producto
+    const codigoProd = (prod.codigo || "").toUpperCase();
+    const movimientoReciente = historialMovimientos.find(m => (m.codigo || "").toUpperCase() === codigoProd);
+    const fechaMod = movimientoReciente ? movimientoReciente.fecha : (prod.fechaModificacion || new Date().toLocaleDateString());
     
     const stockMinVal = prod.stockMin !== undefined ? prod.stockMin : 100;
     let estado = "Buen Nivel";
