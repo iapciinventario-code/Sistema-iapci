@@ -686,6 +686,48 @@ function detectarYNotificarCambiosDeEstatus() {
   });
 }
 
+// ==========================================
+// MÓDULO DE FILTRADO PARA ESTATUS Y STOCK
+// ==========================================
+
+let filtrosStockActivos = null;
+
+function toggleModalFiltroStock() {
+  const modal = document.getElementById("modal-filtro-stock");
+  if (modal) {
+    modal.classList.toggle("oculto");
+  }
+}
+
+function aplicarFiltrosStock() {
+  filtrosStockActivos = {
+    fecha: document.getElementById("filtro-fecha")?.value.trim().toLowerCase() || "",
+    codigo: document.getElementById("filtro-codigo")?.value.trim().toLowerCase() || "",
+    descripcion: document.getElementById("filtro-descripcion")?.value.trim().toLowerCase() || "",
+    categoria: document.getElementById("filtro-categoria")?.value.trim().toUpperCase() || "",
+    pasillo: document.getElementById("filtro-pasillo")?.value.trim() || "",
+    und: document.getElementById("filtro-und")?.value.trim().toLowerCase() || ""
+  };
+
+  renderTablaStock();
+  mostrarToast("🔍 Filtros aplicados a la lista de stock.", "info");
+}
+
+function limpiarFiltrosStock() {
+  filtrosStockActivos = null;
+  
+  // Limpiar inputs del modal
+  ["filtro-fecha", "filtro-codigo", "filtro-descripcion", "filtro-pasillo", "filtro-und"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+  const catSel = document.getElementById("filtro-categoria");
+  if (catSel) catSel.value = "";
+
+  renderTablaStock();
+  mostrarToast("🔄 Filtros restablecidos. Mostrando todo el inventario.", "success");
+}
+
 function renderTablaStock(codigoResaltar = null) {
   const tbody = document.getElementById("cuerpo-tabla-stock");
   if (!tbody) return;
@@ -717,7 +759,32 @@ function renderTablaStock(codigoResaltar = null) {
     return timeB - timeA;
   });
 
-  inventarioOrdenado.forEach((prod) => {
+  // 🔍 Aplicar filtros si están activos
+  let inventarioFiltrado = inventarioOrdenado.filter(prod => {
+    if (!filtrosStockActivos) return true;
+
+    const codigoProd = (prod.codigo || "").toLowerCase();
+    const descProd = (prod.descripcion || "").toLowerCase();
+    const catProd = (prod.categoria || "").toUpperCase();
+    const pasilloProd = String(prod.pasillo !== undefined ? prod.pasillo : "").toLowerCase();
+    const undProd = (prod.und || "").toLowerCase();
+
+    // Obtener la fecha calculada del producto
+    const movReciente = historialMovimientos.find(m => (m.codigo || "").toUpperCase() === (prod.codigo || "").toUpperCase());
+    const fechaProd = (movReciente ? movReciente.fecha : (prod.fechaModificacion || "")).toLowerCase();
+
+    // Validar cada criterio de filtrado si fue llenado
+    if (filtrosStockActivos.fecha && !fechaProd.includes(filtrosStockActivos.fecha)) return false;
+    if (filtrosStockActivos.codigo && !codigoProd.includes(filtrosStockActivos.codigo)) return false;
+    if (filtrosStockActivos.descripcion && !descProd.includes(filtrosStockActivos.descripcion)) return false;
+    if (filtrosStockActivos.categoria && catProd !== filtrosStockActivos.categoria) return false;
+    if (filtrosStockActivos.pasillo && pasilloProd !== filtrosStockActivos.pasillo) return false;
+    if (filtrosStockActivos.und && !undProd.includes(filtrosStockActivos.und)) return false;
+
+    return true;
+  });
+
+  inventarioFiltrado.forEach((prod) => {
     const index = inventario.findIndex(p => p.codigo === prod.codigo);
 
     const stockActual = prod.stockInic + prod.entradas - prod.salidas;
@@ -1845,3 +1912,6 @@ window.limpiarFormulario = limpiarFormulario;
 window.aplicarRestriccionesFechaRegistro = aplicarRestriccionesFechaRegistro;
 window.enviarSolicitudPermisoFecha = enviarSolicitudPermisoFecha;
 window.concederPermisoTemporalFecha = concederPermisoTemporalFecha;
+window.toggleModalFiltroStock = toggleModalFiltroStock;
+window.aplicarFiltrosStock = aplicarFiltrosStock;
+window.limpiarFiltrosStock = limpiarFiltrosStock;
