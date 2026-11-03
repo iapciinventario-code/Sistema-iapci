@@ -1346,6 +1346,47 @@ async function registrarSalida() {
   cambiarPestana('registro');
 }
 
+// ==========================================
+// MÓDULO DE FILTRADO PARA HISTORIAL DE ENTRADAS Y SALIDAS
+// ==========================================
+
+let filtrosHistorialActivos = null;
+
+function toggleModalFiltroHistorial() {
+  const modal = document.getElementById("modal-filtro-historial");
+  if (modal) {
+    modal.classList.toggle("oculto");
+  }
+}
+
+function aplicarFiltrosHistorial() {
+  filtrosHistorialActivos = {
+    fecha: document.getElementById("filtro-hist-fecha")?.value.trim().toLowerCase() || "",
+    codigo: document.getElementById("filtro-hist-codigo")?.value.trim().toLowerCase() || "",
+    producto: document.getElementById("filtro-hist-producto")?.value.trim().toLowerCase() || "",
+    categoria: document.getElementById("filtro-hist-categoria")?.value.trim().toUpperCase() || "",
+    pasillo: document.getElementById("filtro-hist-pasillo")?.value.trim() || "",
+    und: document.getElementById("filtro-hist-und")?.value.trim().toLowerCase() || ""
+  };
+
+  renderTablaHistorial();
+  mostrarToast("🔍 Filtros aplicados al registro de entradas y salidas.", "info");
+}
+
+function limpiarFiltrosHistorial() {
+  filtrosHistorialActivos = null;
+  
+  ["filtro-hist-fecha", "filtro-hist-codigo", "filtro-hist-producto", "filtro-hist-pasillo", "filtro-hist-und"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+  const catSel = document.getElementById("filtro-hist-categoria");
+  if (catSel) catSel.value = "";
+
+  renderTablaHistorial();
+  mostrarToast("🔄 Filtros restablecidos. Mostrando todo el historial.", "success");
+}
+
 function renderTablaHistorial(indiceResaltar = null) {
   const tbody = document.getElementById("cuerpo-tabla-historial");
   if (!tbody) return;
@@ -1353,7 +1394,28 @@ function renderTablaHistorial(indiceResaltar = null) {
 
   let sumaEntradas = 0, sumaSalidas = 0, sumaMontoTotalBs = 0, sumaMontoTotalUsd = 0;
 
-  historialMovimientos.forEach((mov, index) => {
+  // 🔍 Filtrar historial si hay filtros activos
+  let historialFiltrado = historialMovimientos.filter(mov => {
+    if (!filtrosHistorialActivos) return true;
+
+    const fechaMov = (mov.fecha || "").toLowerCase();
+    const codigoMov = (mov.codigo || "").toLowerCase();
+    const prodMov = (mov.producto || "").toLowerCase();
+    const catMov = (mov.categoria || "").toUpperCase();
+    const pasilloMov = String(mov.pasillo !== undefined ? mov.pasillo : "").toLowerCase();
+    const undMov = (mov.und || "").toLowerCase();
+
+    if (filtrosHistorialActivos.fecha && !fechaMov.includes(filtrosHistorialActivos.fecha)) return false;
+    if (filtrosHistorialActivos.codigo && !codigoMov.includes(filtrosHistorialActivos.codigo)) return false;
+    if (filtrosHistorialActivos.producto && !prodMov.includes(filtrosHistorialActivos.producto)) return false;
+    if (filtrosHistorialActivos.categoria && catMov !== filtrosHistorialActivos.categoria) return false;
+    if (filtrosHistorialActivos.pasillo && pasilloMov !== filtrosHistorialActivos.pasillo) return false;
+    if (filtrosHistorialActivos.und && !undMov.includes(filtrosHistorialActivos.und)) return false;
+
+    return true;
+  });
+
+  historialFiltrado.forEach((mov, index) => {
     const cantMov = mov.entrada > 0 ? mov.entrada : mov.salida;
     const precioTotalBs = cantMov * mov.precio;
     const precioUsd = mov.precio / tasaCambioBCV;
@@ -1915,3 +1977,6 @@ window.concederPermisoTemporalFecha = concederPermisoTemporalFecha;
 window.toggleModalFiltroStock = toggleModalFiltroStock;
 window.aplicarFiltrosStock = aplicarFiltrosStock;
 window.limpiarFiltrosStock = limpiarFiltrosStock;
+window.toggleModalFiltroHistorial = toggleModalFiltroHistorial;
+window.aplicarFiltrosHistorial = aplicarFiltrosHistorial;
+window.limpiarFiltrosHistorial = limpiarFiltrosHistorial;
