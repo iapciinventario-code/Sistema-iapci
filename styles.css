@@ -162,15 +162,22 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     }
 }
 
-/* Asegura que el selector comparta los mismos estilos y tamaños que los inputs */
-.campo-formulario, input[type="text"], input[type="number"], select {
+/* Todos los campos e inputs estándar de la interfaz de registro miden lo mismo que el de categoría */
+.campo-formulario, 
+.vista-registro input[type="text"], 
+.vista-registro input[type="number"], 
+.vista-registro select {
   width: 100%;
+  height: 32px; /* Altura unificada para que todos sean idénticos */
   padding: 6px 8px;
   box-sizing: border-box;
   border: 1px solid #ccc;
   border-radius: 4px;
   font-size: 12px;
-  height: 30px;
   background-color: #ffffff;
-  color: #333333;
+}
+
+/* Excepción exclusiva para el campo de la tasa del día, reduciendo su longitud (ancho) a la mitad */
+#f-tasa-cambio {
+  width: 50% !important;
 }
