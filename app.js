@@ -583,6 +583,7 @@ function renderTablaStock(codigoResaltar = null) {
   inventario.forEach((prod, index) => {
     const stockActual = prod.stockInic + prod.entradas - prod.salidas;
     const valorDisponibleBs = stockActual * prod.precioBs;
+    const fechaMod = prod.fechaModificacion || new Date().toLocaleDateString();
     
     const stockMinVal = prod.stockMin !== undefined ? prod.stockMin : 100;
     let estado = "Buen Nivel";
@@ -591,7 +592,7 @@ function renderTablaStock(codigoResaltar = null) {
     } else if (stockActual < 100 || stockActual < stockMinVal) {
       estado = "Bajo Nivel";
     } else {
-      estado = "Buen Nivel"; // Solo dice "buen nivel" si es igual o mayor a 100
+      estado = "Buen Nivel";
     }
     const claseBadge = estado === "Buen Nivel" ? "badge-buen" : (estado === "Bajo Nivel" ? "badge-bajo" : "badge-agotado");
 
@@ -624,6 +625,7 @@ function renderTablaStock(codigoResaltar = null) {
       <td>Bs.S ${valorDisponibleBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</td>
       <td>${stockMinVal}</td>
       <td><span class="${claseBadge}">${estado}</span></td>
+      <td>${fechaMod}</td>
       <td>${prod.obs || '-'}</td>
       <td><button onclick="modificarStockFila(${index})" style="background:#007bff; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">Editar</button></td>
     `;
@@ -775,6 +777,7 @@ async function modificarStockFila(index) {
     prod.precioBs = nuevoPrecio;
     prod.stockMin = nuevoStockMin;
     prod.obs = nuevaObs;
+    prod.fechaModificacion = new Date().toLocaleDateString();
 
     inventario[index] = prod;
 
@@ -801,7 +804,6 @@ function validarYProcesarRegistro() {
   const idsAValidar = ["f-codigo", "f-producto", "f-precio", "f-cantidad"];
   let camposVacios = [];
   
-  // Limpiar estilos de error previos
   idsAValidar.forEach(function(id) {
     const el = document.getElementById(id);
     if (el) {
@@ -810,7 +812,6 @@ function validarYProcesarRegistro() {
     }
   });
   
-  // Validar campos vacíos en el DOM
   idsAValidar.forEach(function(id) {
     const el = document.getElementById(id);
     const valor = el ? el.value.trim() : "";
@@ -850,7 +851,6 @@ function nuevoProducto() {
     const precioVal = precioElem ? precioElem.value.trim() : "";
     const cantVal = cantElem ? cantElem.value.trim() : "";
 
-    // Validación específica: verificar obligatoriamente si el campo de cantidad está vacío
     if (!cantVal) {
       mostrarToast("⚠️ El campo 'Cantidad (Entrada/Salida)' es obligatorio para registrar un nuevo producto.", "warning");
       if (cantElem) {
@@ -865,11 +865,9 @@ function nuevoProducto() {
       return;
     }
 
-    // Validación general para el resto de los campos obligatorios
     if (!codigo || !descripcion || !categoria || !pasilloVal || !und || !precioVal) {
       mostrarToast("⚠️ Debe llenar todos los datos del producto antes de continuar.", "warning");
       
-      // Resaltar los campos vacíos
       [codigoElem, descElem, catElem, pasElem, undElem, precioElem].forEach(el => {
         if (el && !el.value.trim()) {
           el.style.borderColor = "#c0392b";
@@ -909,12 +907,14 @@ function nuevoProducto() {
       return;
     }
 
+    const fechaActualStr = new Date().toLocaleDateString();
+
     const nuevoProdObj = {
-      codigo, descripcion, categoria, pasillo, und, precioBs, stockInic: cantInic, entradas: 0, salidas: 0, stockMin: stockMinInput, obs
+      codigo, descripcion, categoria, pasillo, und, precioBs, stockInic: cantInic, entradas: 0, salidas: 0, stockMin: stockMinInput, obs, fechaModificacion: fechaActualStr
     };
 
     const nuevoHistObj = {
-      fecha: new Date().toLocaleDateString(), codigo, producto: descripcion, categoria, pasillo, und, precio: precioBs, entrada: cantInic, salida: 0, observacion: obs, timestamp: Date.now()
+      fecha: fechaActualStr, codigo, producto: descripcion, categoria, pasillo, und, precio: precioBs, entrada: cantInic, salida: 0, observacion: obs, timestamp: Date.now()
     };
 
     if (db) {
@@ -976,9 +976,10 @@ async function registrarEntrada() {
       nuevoPrecioBs = (prod.precioBs + precioNuevo) / 2;
     }
     const nuevasEntradas = prod.entradas + cant;
+    const fechaActualStr = new Date().toLocaleDateString();
 
     const nuevoMovimiento = {
-      fecha: new Date().toLocaleDateString(), 
+      fecha: fechaActualStr, 
       codigo: prod.codigo, 
       producto: prod.descripcion, 
       categoria: prod.categoria, 
@@ -991,18 +992,21 @@ async function registrarEntrada() {
       timestamp: Date.now()
     };
 
+    prod.entradas = nuevasEntradas;
+    prod.precioBs = nuevoPrecioBs;
+    prod.fechaModificacion = fechaActualStr;
+
     if (db && prod.idDoc) {
       await updateDoc(doc(db, "iapci_stock", prod.idDoc), {
         precioBs: nuevoPrecioBs,
-        entradas: nuevasEntradas
+        entradas: nuevasEntradas,
+        fechaModificacion: fechaActualStr
       });
 
       const docRefHist = await addDoc(collection(db, "iapci_historial"), nuevoMovimiento);
       nuevoMovimiento.idDoc = docRefHist.id;
     }
     
-    prod.entradas = nuevasEntradas;
-    prod.precioBs = nuevoPrecioBs;
     historialMovimientos.unshift(nuevoMovimiento);
     actualizarTodo(null, 0);
 
@@ -1066,9 +1070,10 @@ async function registrarSalida() {
 
   const nuevasSalidas = prod.salidas + cant;
   const nuevoPrecioBs = precio > 0 ? precio : prod.precioBs;
+  const fechaActualStr = new Date().toLocaleDateString();
 
   const nuevoMovimiento = {
-    fecha: new Date().toLocaleDateString(), 
+    fecha: fechaActualStr, 
     codigo: prod.codigo, 
     producto: prod.descripcion, 
     categoria: prod.categoria, 
@@ -1081,18 +1086,21 @@ async function registrarSalida() {
     timestamp: Date.now()
   };
 
+  prod.salidas = nuevasSalidas;
+  prod.precioBs = nuevoPrecioBs;
+  prod.fechaModificacion = fechaActualStr;
+
   if (db && prod.idDoc) {
     await updateDoc(doc(db, "iapci_stock", prod.idDoc), {
       salidas: nuevasSalidas,
-      precioBs: nuevoPrecioBs
+      precioBs: nuevoPrecioBs,
+      fechaModificacion: fechaActualStr
     });
 
     const docRefHist = await addDoc(collection(db, "iapci_historial"), nuevoMovimiento);
     nuevoMovimiento.idDoc = docRefHist.id;
   }
   
-  prod.salidas = nuevasSalidas;
-  prod.precioBs = nuevoPrecioBs;
   historialMovimientos.unshift(nuevoMovimiento);
   actualizarTodo(null, 0);
   
@@ -1195,12 +1203,10 @@ function eliminarRegistro() {
             movLimpioParaPapelera.idDoc = docRefPapelera.id;
           }
 
-          // Buscar el producto en el inventario
           let prodIndex = inventario.findIndex(p => (p.codigo || "").toUpperCase() === codigoProd);
           let prod = prodIndex !== -1 ? inventario[prodIndex] : null;
 
           if (prod) {
-            // Revertir únicamente el efecto del movimiento eliminado sin tocar el stock inicial
             if (movEliminado.salida > 0) {
               prod.salidas = Math.max(0, prod.salidas - movEliminado.salida);
             }
@@ -1208,20 +1214,22 @@ function eliminarRegistro() {
               prod.entradas = Math.max(0, prod.entradas - movEliminado.entrada);
             }
 
-            // Actualizar el precio tomando el último movimiento válido restante en el historial del producto
             const movimientosRestantes = historialMovimientos.filter(m => (m.codigo || "").toUpperCase() === codigoProd);
             if (movimientosRestantes.length > 0) {
-              const ultimoMov = movimientosRestantes[0]; // El primero tras el shift es el más reciente
+              const ultimoMov = movimientosRestantes[0];
               if (ultimoMov.precio > 0) {
                 prod.precioBs = ultimoMov.precio;
               }
             }
 
+            prod.fechaModificacion = new Date().toLocaleDateString();
+
             if (db && prod.idDoc) {
               await updateDoc(doc(db, "iapci_stock", prod.idDoc), {
                 entradas: prod.entradas,
                 salidas: prod.salidas,
-                precioBs: prod.precioBs
+                precioBs: prod.precioBs,
+                fechaModificacion: prod.fechaModificacion
               });
             }
           }
@@ -1256,7 +1264,6 @@ function limpiarFormulario() {
   camposIds.forEach(id => {
     const elemento = document.getElementById(id);
     if (elemento) {
-      // Mantiene el valor por defecto de 100 para el stock mínimo y limpia el resto
       elemento.value = (id === "f-stock-min") ? "100" : "";
       elemento.style.borderColor = "";
       elemento.style.backgroundColor = "";
@@ -1384,7 +1391,6 @@ function renderReporteGeneral() {
       tbodyCat.appendChild(tr);
     }
 
-    // Fila "TOTALES" eliminada de la vista visible de la tabla, pero se conservan los cálculos abajo:
     if (document.getElementById("cat-total-productos")) document.getElementById("cat-total-productos").textContent = sumaCatProd;
     if (document.getElementById("cat-total-stock")) document.getElementById("cat-total-stock").textContent = sumaCatStock.toLocaleString('es-VE');
     if (document.getElementById("cat-total-valor")) document.getElementById("cat-total-valor").textContent = `Bs.S ${sumaCatValor.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`;
@@ -1513,6 +1519,7 @@ async function restaurarRegistroPapelera(index) {
       delete movRestaurar.idDoc;
 
       const codigoRestaurar = (movRestaurar.codigo || "").toUpperCase();
+      const fechaActualStr = new Date().toLocaleDateString();
 
       historialMovimientos.unshift({ ...movRestaurar, timestamp: Date.now() });
 
@@ -1521,8 +1528,6 @@ async function restaurarRegistroPapelera(index) {
       if (prod) {
         if (movRestaurar.entrada > 0) {
           prod.entradas += movRestaurar.entrada;
-          
-          // Aplica el promedio si el movimiento restaurado es una entrada con precio válido
           if (movRestaurar.precio > 0) {
             prod.precioBs = (prod.precioBs + movRestaurar.precio) / 2;
           }
@@ -1535,11 +1540,14 @@ async function restaurarRegistroPapelera(index) {
           }
         }
 
+        prod.fechaModificacion = fechaActualStr;
+
         if (db && prod.idDoc) {
           await updateDoc(doc(db, "iapci_stock", prod.idDoc), {
             entradas: prod.entradas,
             salidas: prod.salidas,
-            precioBs: prod.precioBs
+            precioBs: prod.precioBs,
+            fechaModificacion: fechaActualStr
           });
         }
       } else {
@@ -1554,7 +1562,8 @@ async function restaurarRegistroPapelera(index) {
           entradas: 0,
           salidas: movRestaurar.salida > 0 ? movRestaurar.salida : 0,
           stockMin: 100,
-          obs: movRestaurar.observacion || "RESTAURADO DESDE PAPELERA"
+          obs: movRestaurar.observacion || "RESTAURADO DESDE PAPELERA",
+          fechaModificacion: fechaActualStr
         };
         
         inventario.push(nuevoProd);
