@@ -183,5 +183,5 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 
 /* Excepción: El campo de la Tasa del Día medirá una cuarta parte (25%) de lo largo */
 #f-tasa-cambio {
-  width: 8% !important;
+  width: 15% !important;
 }
