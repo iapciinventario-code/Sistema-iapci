@@ -908,7 +908,6 @@ function nuevoProducto() {
     }
 
     const fechaActualStr = new Date().toLocaleDateString();
-
     const nuevoProdObj = {
       codigo, descripcion, categoria, pasillo, und, precioBs, stockInic: cantInic, entradas: 0, salidas: 0, stockMin: stockMinInput, obs, fechaModificacion: fechaActualStr
     };
@@ -992,8 +991,6 @@ async function registrarEntrada() {
       timestamp: Date.now()
     };
 
-    prod.entradas = nuevasEntradas;
-    prod.precioBs = nuevoPrecioBs;
     prod.fechaModificacion = fechaActualStr;
 
     if (db && prod.idDoc) {
@@ -1007,6 +1004,8 @@ async function registrarEntrada() {
       nuevoMovimiento.idDoc = docRefHist.id;
     }
     
+    prod.entradas = nuevasEntradas;
+    prod.precioBs = nuevoPrecioBs;
     historialMovimientos.unshift(nuevoMovimiento);
     actualizarTodo(null, 0);
 
@@ -1086,8 +1085,6 @@ async function registrarSalida() {
     timestamp: Date.now()
   };
 
-  prod.salidas = nuevasSalidas;
-  prod.precioBs = nuevoPrecioBs;
   prod.fechaModificacion = fechaActualStr;
 
   if (db && prod.idDoc) {
@@ -1101,6 +1098,8 @@ async function registrarSalida() {
     nuevoMovimiento.idDoc = docRefHist.id;
   }
   
+  prod.salidas = nuevasSalidas;
+  prod.precioBs = nuevoPrecioBs;
   historialMovimientos.unshift(nuevoMovimiento);
   actualizarTodo(null, 0);
   
@@ -1528,6 +1527,7 @@ async function restaurarRegistroPapelera(index) {
       if (prod) {
         if (movRestaurar.entrada > 0) {
           prod.entradas += movRestaurar.entrada;
+          
           if (movRestaurar.precio > 0) {
             prod.precioBs = (prod.precioBs + movRestaurar.precio) / 2;
           }
@@ -1587,6 +1587,7 @@ async function restaurarRegistroPapelera(index) {
     }
   });
 }
+
 async function eliminarSeleccionadosPapelera() {
   verificarPermisoAdmin(async () => {
     const seleccionados = Array.from(document.querySelectorAll('.chk-item-papelera:checked'))
