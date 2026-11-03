@@ -764,10 +764,10 @@ function renderTablaStock(codigoResaltar = null) {
     if (!filtrosStockActivos) return true;
 
     const codigoProd = (prod.codigo || "").toLowerCase();
-    const descProd = (prod.descripcion || "").toLowerCase();
+    
     const catProd = (prod.categoria || "").toUpperCase();
     const pasilloProd = String(prod.pasillo !== undefined ? prod.pasillo : "").toLowerCase();
-    const undProd = (prod.und || "").toLowerCase();
+    
 
     // Obtener la fecha calculada del producto
     const movReciente = historialMovimientos.find(m => (m.codigo || "").toUpperCase() === (prod.codigo || "").toUpperCase());
@@ -776,10 +776,10 @@ function renderTablaStock(codigoResaltar = null) {
     // Validar cada criterio de filtrado si fue llenado
     if (filtrosStockActivos.fecha && !fechaProd.includes(filtrosStockActivos.fecha)) return false;
     if (filtrosStockActivos.codigo && !codigoProd.includes(filtrosStockActivos.codigo)) return false;
-    if (filtrosStockActivos.descripcion && !descProd.includes(filtrosStockActivos.descripcion)) return false;
+    
     if (filtrosStockActivos.categoria && catProd !== filtrosStockActivos.categoria) return false;
     if (filtrosStockActivos.pasillo && pasilloProd !== filtrosStockActivos.pasillo) return false;
-    if (filtrosStockActivos.und && !undProd.includes(filtrosStockActivos.und)) return false;
+    
 
     return true;
   });
